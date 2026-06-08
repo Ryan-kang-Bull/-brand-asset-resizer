@@ -127,7 +127,9 @@
   <body>
     <header>
       <input id="search" type="search" placeholder="Search brand assets…" />
+      <button id="import" title="Import illustrations (SVG/PNG/JPG) as components">↑ Import</button>
       <button id="refresh" title="Re-scan the file">↻</button>
+      <input id="file" type="file" multiple accept=".svg,.png,.jpg,.jpeg" style="display:none" />
     </header>
 
     <div id="grid"></div>
@@ -150,7 +152,15 @@
           <input id="lock" type="checkbox" checked /> Lock ratio
         </label>
       </div>
-      <button id="place" class="primary" disabled>Place on canvas</button>
+      <div class="row">
+        <button id="place" class="primary" style="flex:1" disabled>Place on canvas</button>
+        <select id="format" title="Export format" style="flex:0 0 auto;">
+          <option>PNG</option>
+          <option>SVG</option>
+          <option>JPG</option>
+        </select>
+        <button id="export" disabled>Export</button>
+      </div>
       <div id="status"></div>
     </footer>
 
@@ -222,10 +232,32 @@
             selectedId = a.id;
             renderGrid();
             applyPreset();
-            $("place").disabled = false;
+            setEnabled(true);
           };
           grid.appendChild(tile);
         }
+      }
+
+      // Enable/disable the place + export actions together.
+      function setEnabled(on) {
+        $("place").disabled = !on;
+        $("export").disabled = !on;
+      }
+
+      // Read & validate the requested size; returns null (and sets status) if invalid.
+      function sizeRequest() {
+        const w = parseInt($("w").value, 10);
+        const h = parseInt($("h").value, 10);
+        if (!selectedId || !w || !h) {
+          $("status").textContent = "Pick an asset and a valid size.";
+          return null;
+        }
+        return {
+          assetId: selectedId,
+          width: w,
+          height: h,
+          lockAspect: $("lock").checked,
+        };
       }
 
       // --- Events --------------------------------------------------------
@@ -235,26 +267,69 @@
         parent.postMessage({ pluginMessage: { type: "init" } }, "*");
 
       $("place").onclick = () => {
-        const w = parseInt($("w").value, 10);
-        const h = parseInt($("h").value, 10);
-        if (!selectedId || !w || !h) {
-          $("status").textContent = "Pick an asset and a valid size.";
-          return;
-        }
+        const req = sizeRequest();
+        if (!req) return;
         $("status").textContent = "Placing…";
+        parent.postMessage({ pluginMessage: { type: "place", ...req } }, "*");
+      };
+
+      $("export").onclick = () => {
+        const req = sizeRequest();
+        if (!req) return;
+        $("status").textContent = "Exporting…";
         parent.postMessage(
-          {
-            pluginMessage: {
-              type: "place",
-              assetId: selectedId,
-              width: w,
-              height: h,
-              lockAspect: $("lock").checked,
-            },
-          },
+          { pluginMessage: { type: "export", format: $("format").value, ...req } },
           "*"
         );
       };
+
+      // --- Import (brand team uploads illustrations as components) --------
+      $("import").onclick = () => $("file").click();
+
+      $("file").onchange = async (e) => {
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+        $("status").textContent = "Reading " + files.length + " file(s)…";
+        const payload = [];
+        for (const f of files) {
+          const ext = (f.name.split(".").pop() || "").toLowerCase();
+          const name = f.name.replace(/\.[^.]+$/, "");
+          if (ext === "svg") {
+            payload.push({ name, format: "SVG", svg: await f.text() });
+          } else {
+            const buf = await f.arrayBuffer();
+            payload.push({
+              name,
+              format: ext === "png" ? "PNG" : "JPG",
+              bytes: new Uint8Array(buf),
+            });
+          }
+        }
+        $("status").textContent = "Importing " + payload.length + " illustration(s)…";
+        parent.postMessage({ pluginMessage: { type: "import", files: payload } }, "*");
+        e.target.value = ""; // allow re-selecting the same file later
+      };
+
+      // Trigger a browser download for exported bytes.
+      function downloadBytes(name, format, width, bytes) {
+        const mime =
+          format === "SVG"
+            ? "image/svg+xml"
+            : format === "JPG"
+            ? "image/jpeg"
+            : "image/png";
+        const ext = format.toLowerCase();
+        const safe = name.replace(/[^\w.-]+/g, "_");
+        const blob = new Blob([bytes], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = safe + "-" + width + "." + ext;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
 
       // --- Messages from the main thread ---------------------------------
       onmessage = (event) => {
@@ -263,11 +338,14 @@
         if (msg.type === "catalog") {
           assets = msg.assets;
           if (!selectedAsset()) selectedId = null;
-          $("place").disabled = !selectedId;
+          setEnabled(!!selectedId);
           renderGrid();
           $("status").textContent = assets.length + " brand asset(s) found.";
         } else if (msg.type === "placed") {
           $("status").textContent = "Placed “" + msg.name + "”.";
+        } else if (msg.type === "exported") {
+          downloadBytes(msg.name, msg.format, msg.width, msg.bytes);
+          $("status").textContent = "Exported “" + msg.name + "”.";
         } else if (msg.type === "error") {
           $("status").textContent = "Error: " + msg.message;
         }

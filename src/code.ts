@@ -20,15 +20,27 @@ interface AssetSummary {
   preview: string | null; // data URI (PNG) or null if it couldn't be rendered
 }
 
+type ExportFormat = "PNG" | "SVG" | "JPG";
+
+interface SizeRequest {
+  assetId: string;
+  width: number;
+  height: number;
+  lockAspect: boolean;
+}
+
+interface ImportFile {
+  name: string;
+  format: ExportFormat;
+  svg?: string; // present for SVG uploads
+  bytes?: Uint8Array; // present for PNG/JPG uploads
+}
+
 type UIMessage =
   | { type: "init" }
-  | {
-      type: "place";
-      assetId: string;
-      width: number;
-      height: number;
-      lockAspect: boolean;
-    };
+  | ({ type: "place" } & SizeRequest)
+  | ({ type: "export"; format: ExportFormat } & SizeRequest)
+  | { type: "import"; files: ImportFile[] };
 
 figma.showUI(__html__, { width: 320, height: 560, themeColors: true });
 
@@ -38,6 +50,10 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       await sendCatalog();
     } else if (msg.type === "place") {
       await placeAsset(msg);
+    } else if (msg.type === "export") {
+      await exportAsset(msg);
+    } else if (msg.type === "import") {
+      await importAssets(msg.files);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -100,9 +116,9 @@ async function renderThumb(node: SceneNode): Promise<string | null> {
   }
 }
 
-/** Instance the chosen component, resize it, and place it on the current page. */
-async function placeAsset(msg: Extract<UIMessage, { type: "place" }>): Promise<void> {
-  const node = await figma.getNodeByIdAsync(msg.assetId);
+/** Create an instance of the chosen component, resized to the requested size. */
+async function buildInstance(req: SizeRequest): Promise<InstanceNode> {
+  const node = await figma.getNodeByIdAsync(req.assetId);
   if (!node) {
     throw new Error("That asset no longer exists in this file. Try Refresh.");
   }
@@ -119,23 +135,100 @@ async function placeAsset(msg: Extract<UIMessage, { type: "place" }>): Promise<v
   const { width, height } = fitSize(
     instance.width,
     instance.height,
-    msg.width,
-    msg.height,
-    msg.lockAspect
+    req.width,
+    req.height,
+    req.lockAspect
   );
   instance.resize(width, height);
+  return instance;
+}
+
+/** Instance the chosen component, resize it, and place it on the current page. */
+async function placeAsset(msg: SizeRequest): Promise<void> {
+  const instance = await buildInstance(msg);
 
   // Drop it at the center of the current viewport.
   const center = figma.viewport.center;
-  instance.x = Math.round(center.x - width / 2);
-  instance.y = Math.round(center.y - height / 2);
+  instance.x = Math.round(center.x - instance.width / 2);
+  instance.y = Math.round(center.y - instance.height / 2);
 
   figma.currentPage.appendChild(instance);
   figma.currentPage.selection = [instance];
   figma.viewport.scrollAndZoomIntoView([instance]);
 
   figma.ui.postMessage({ type: "placed", name: instance.name });
-  figma.notify(`Placed “${instance.name}” at ${width}×${height}`);
+  figma.notify(`Placed “${instance.name}” at ${instance.width}×${instance.height}`);
+}
+
+/** Build a resized instance, export it to file bytes, then discard the temp node. */
+async function exportAsset(
+  msg: SizeRequest & { format: ExportFormat }
+): Promise<void> {
+  const instance = await buildInstance(msg);
+  try {
+    const settings: ExportSettings =
+      msg.format === "SVG"
+        ? { format: "SVG" }
+        : { format: msg.format, constraint: { type: "SCALE", value: 1 } };
+    const bytes = await instance.exportAsync(settings);
+    figma.ui.postMessage({
+      type: "exported",
+      name: instance.name,
+      format: msg.format,
+      width: Math.round(instance.width),
+      bytes,
+    });
+    figma.notify(`Exported “${instance.name}” as ${msg.format}`);
+  } finally {
+    // Export-only: never leave the temporary node on the canvas.
+    instance.remove();
+  }
+}
+
+/**
+ * Brand-team flow: turn uploaded illustrations into components on the current
+ * page so they become part of the asset library the plugin reads from.
+ */
+async function importAssets(files: ImportFile[]): Promise<void> {
+  if (!files.length) return;
+
+  const center = figma.viewport.center;
+  let x = Math.round(center.x);
+  const y = Math.round(center.y);
+  const created: ComponentNode[] = [];
+
+  for (const file of files) {
+    let node: SceneNode;
+    if (file.format === "SVG" && file.svg) {
+      node = figma.createNodeFromSvg(file.svg);
+    } else if (file.bytes) {
+      const image = figma.createImage(file.bytes);
+      const { width, height } = await image.getSizeAsync();
+      const rect = figma.createRectangle();
+      rect.resize(width, height);
+      rect.fills = [{ type: "IMAGE", scaleMode: "FILL", imageHash: image.hash }];
+      node = rect;
+    } else {
+      continue;
+    }
+
+    node.name = file.name;
+    const component = figma.createComponentFromNode(node);
+    component.name = file.name;
+    component.x = x;
+    component.y = y;
+    x += Math.round(component.width) + 80;
+    created.push(component);
+  }
+
+  if (created.length) {
+    figma.currentPage.selection = created;
+    figma.viewport.scrollAndZoomIntoView(created);
+    figma.notify(`Imported ${created.length} illustration(s) as components`);
+  }
+
+  // Refresh the catalog so the new components appear in the picker.
+  await sendCatalog();
 }
 
 /** Compute final dimensions, optionally preserving the asset's aspect ratio. */
