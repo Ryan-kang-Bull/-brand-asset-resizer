@@ -95,7 +95,7 @@ async function renderThumb(node: SceneNode): Promise<string | null> {
       constraint: { type: "SCALE", value: scale },
     });
     return `data:image/png;base64,${figma.base64Encode(bytes)}`;
-  } catch {
+  } catch (_err) {
     return null;
   }
 }
