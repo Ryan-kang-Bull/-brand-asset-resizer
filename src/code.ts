@@ -106,19 +106,30 @@ async function sendCatalog(): Promise<void> {
 
 /** Export a small PNG thumbnail of a node as a data URI. */
 async function renderThumb(node: SceneNode): Promise<string | null> {
+  // These illustrations are frames that crop a larger composition, but many have
+  // clipsContent OFF — so a plain export renders the overflowing source art (wide
+  // dark bars). Clone, force-clip to the frame box, export, then discard the clone.
+  let clone: SceneNode | null = null;
   try {
-    // Scale off the node's own box and DON'T use absolute bounds: these
-    // illustrations are frames that crop a larger composition, so we want the
-    // cropped frame as seen on canvas, not the overflowing source art.
     const longest = Math.max(node.width, node.height) || 1;
     const scale = Math.min(1, THUMB_MAX_PX / longest);
-    const bytes = await node.exportAsync({
+
+    let target: SceneNode = node;
+    if ("clipsContent" in node && !node.clipsContent && "clone" in node) {
+      clone = node.clone();
+      (clone as FrameNode | ComponentNode).clipsContent = true;
+      target = clone;
+    }
+
+    const bytes = await target.exportAsync({
       format: "PNG",
       constraint: { type: "SCALE", value: scale },
     });
     return `data:image/png;base64,${figma.base64Encode(bytes)}`;
   } catch (_err) {
     return null;
+  } finally {
+    if (clone) clone.remove();
   }
 }
 
@@ -146,6 +157,13 @@ async function buildInstance(req: SizeRequest): Promise<InstanceNode> {
     req.lockAspect
   );
   instance.resize(width, height);
+
+  // The illustrations crop a larger composition but often ship with clipsContent
+  // off; force it on so the placed/exported asset is the intended cropped art,
+  // not the overflowing source.
+  if ("clipsContent" in instance) {
+    instance.clipsContent = true;
+  }
   return instance;
 }
 
