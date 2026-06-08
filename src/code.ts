@@ -10,7 +10,7 @@
 // It never *generates* artwork — it only ever instances existing components, which
 // keeps everything brand-approved.
 
-const THUMB_MAX_PX = 200;
+const THUMB_MAX_PX = 256;
 
 interface AssetSummary {
   id: string;
@@ -43,7 +43,7 @@ type UIMessage =
   | { type: "import"; files: ImportFile[] }
   | { type: "import-selection" };
 
-figma.showUI(__html__, { width: 320, height: 560, themeColors: true });
+figma.showUI(__html__, { width: 400, height: 620, themeColors: true });
 
 figma.ui.onmessage = async (msg: UIMessage) => {
   try {
