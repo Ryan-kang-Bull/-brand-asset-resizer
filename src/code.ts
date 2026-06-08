@@ -106,19 +106,28 @@ async function sendCatalog(): Promise<void> {
 
 /** Export a small PNG thumbnail of a node as a data URI. */
 async function renderThumb(node: SceneNode): Promise<string | null> {
-  // These illustrations are frames that crop a larger composition, but many have
-  // clipsContent OFF — so a plain export renders the overflowing source art (wide
-  // dark bars). Clone, force-clip to the frame box, export, then discard the clone.
-  let clone: SceneNode | null = null;
+  // These illustrations crop a larger composition, but setting clipsContent on the
+  // node doesn't constrain exportAsync. So wrap a clone inside a fresh clipping
+  // frame sized to the node's box and export the wrapper — that reliably cuts the
+  // overflowing source art down to the intended box. Discard the wrapper after.
+  let wrapper: FrameNode | null = null;
   try {
-    const longest = Math.max(node.width, node.height) || 1;
+    const w = node.width;
+    const h = node.height;
+    const longest = Math.max(w, h) || 1;
     const scale = Math.min(1, THUMB_MAX_PX / longest);
 
     let target: SceneNode = node;
-    if ("clipsContent" in node && !node.clipsContent && "clone" in node) {
-      clone = node.clone();
-      (clone as FrameNode | ComponentNode).clipsContent = true;
-      target = clone;
+    if ("clone" in node) {
+      const clone = node.clone();
+      wrapper = figma.createFrame();
+      wrapper.resize(w, h);
+      wrapper.clipsContent = true;
+      wrapper.fills = [];
+      wrapper.appendChild(clone);
+      clone.x = 0;
+      clone.y = 0;
+      target = wrapper;
     }
 
     const bytes = await target.exportAsync({
@@ -129,7 +138,7 @@ async function renderThumb(node: SceneNode): Promise<string | null> {
   } catch (_err) {
     return null;
   } finally {
-    if (clone) clone.remove();
+    if (wrapper) wrapper.remove();
   }
 }
 
