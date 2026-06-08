@@ -155,16 +155,18 @@
     </footer>
 
     <script>
-      // Product-team size presets. "Original" and "Custom" are handled specially.
+      // Responsive breakpoint presets (width-based). Each illustration is resized to the
+      // breakpoint's midpoint width; height follows the asset's native aspect ratio.
+      // "Original" and "Custom" are handled specially.
       const PRESETS = [
-        { label: "Original size", w: null, h: null },
-        { label: "App icon — 1024×1024", w: 1024, h: 1024 },
-        { label: "Avatar — 256×256", w: 256, h: 256 },
-        { label: "Toolbar icon — 24×24", w: 24, h: 24 },
-        { label: "Favicon — 32×32", w: 32, h: 32 },
-        { label: "Card thumbnail — 320×180", w: 320, h: 180 },
-        { label: "Social / OG — 1200×630", w: 1200, h: 630 },
-        { label: "Custom…", w: "custom", h: "custom" },
+        { label: "Original size", w: null },
+        { label: "SM · 544px  (320–767)", w: 544 },
+        { label: "MD · 896px  (768–1023)", w: 896 },
+        { label: "LG · 1152px  (1024–1279)", w: 1152 },
+        { label: "XL · 1360px  (1280–1439)", w: 1360 },
+        { label: "2XL · 1584px  (1440–1727)", w: 1584 },
+        { label: "3XL · 1728px  (1728+)", w: 1728 },
+        { label: "Custom…", w: "custom" },
       ];
 
       const $ = (id) => document.getElementById(id);
@@ -185,15 +187,17 @@
 
       function applyPreset() {
         const p = PRESETS[Number($("preset").value)];
+        const a = selectedAsset();
         if (p.w === "custom") return; // leave inputs editable
         if (p.w === null) {
-          const a = selectedAsset();
+          // Original: native dimensions.
           $("w").value = a ? a.width : "";
           $("h").value = a ? a.height : "";
-        } else {
-          $("w").value = p.w;
-          $("h").value = p.h;
+          return;
         }
+        // Breakpoint width; height auto-derived from the asset's aspect ratio.
+        $("w").value = p.w;
+        $("h").value = a ? Math.round((p.w * a.height) / a.width) : "";
       }
 
       function renderGrid() {
