@@ -40,7 +40,8 @@ type UIMessage =
   | { type: "init" }
   | ({ type: "place" } & SizeRequest)
   | ({ type: "export"; format: ExportFormat } & SizeRequest)
-  | { type: "import"; files: ImportFile[] };
+  | { type: "import"; files: ImportFile[] }
+  | { type: "import-selection" };
 
 figma.showUI(__html__, { width: 320, height: 560, themeColors: true });
 
@@ -54,6 +55,8 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       await exportAsset(msg);
     } else if (msg.type === "import") {
       await importAssets(msg.files);
+    } else if (msg.type === "import-selection") {
+      await importSelection();
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -183,6 +186,48 @@ async function exportAsset(
     // Export-only: never leave the temporary node on the canvas.
     instance.remove();
   }
+}
+
+/**
+ * Brand-team flow: convert the currently-selected frames/groups into components
+ * (in place) so they join the library. With nothing selected, ask the UI to open
+ * the file picker instead.
+ */
+async function importSelection(): Promise<void> {
+  const selection = figma.currentPage.selection;
+  if (selection.length === 0) {
+    figma.ui.postMessage({ type: "pick-files" });
+    return;
+  }
+
+  const created: ComponentNode[] = [];
+  let alreadyComponents = 0;
+  let failed = 0;
+
+  for (const node of selection) {
+    if (node.type === "COMPONENT" || node.type === "COMPONENT_SET") {
+      alreadyComponents++;
+      continue;
+    }
+    try {
+      created.push(figma.createComponentFromNode(node));
+    } catch (_err) {
+      failed++;
+    }
+  }
+
+  if (created.length) {
+    figma.currentPage.selection = created;
+    figma.viewport.scrollAndZoomIntoView(created);
+  }
+
+  const parts: string[] = [];
+  if (created.length) parts.push(`Converted ${created.length} to component(s)`);
+  if (alreadyComponents) parts.push(`${alreadyComponents} already component(s)`);
+  if (failed) parts.push(`${failed} couldn't convert`);
+  figma.notify(parts.length ? parts.join(" · ") : "Nothing to convert");
+
+  await sendCatalog();
 }
 
 /**

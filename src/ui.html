@@ -127,7 +127,7 @@
   <body>
     <header>
       <input id="search" type="search" placeholder="Search brand assets…" />
-      <button id="import" title="Import illustrations (SVG/PNG/JPG) as components">↑ Import</button>
+      <button id="import" title="Import: convert selected frames to components, or upload SVG/PNG/JPG if nothing is selected">↑ Import</button>
       <button id="refresh" title="Re-scan the file">↻</button>
       <input id="file" type="file" multiple accept=".svg,.png,.jpg,.jpeg" style="display:none" />
     </header>
@@ -283,8 +283,13 @@
         );
       };
 
-      // --- Import (brand team uploads illustrations as components) --------
-      $("import").onclick = () => $("file").click();
+      // --- Import (brand team) -------------------------------------------
+      // Ask the main thread to ingest the current selection; if nothing is
+      // selected it replies "pick-files" and we open the upload dialog.
+      $("import").onclick = () => {
+        $("status").textContent = "Importing selection…";
+        parent.postMessage({ pluginMessage: { type: "import-selection" } }, "*");
+      };
 
       $("file").onchange = async (e) => {
         const files = Array.from(e.target.files || []);
@@ -346,6 +351,9 @@
         } else if (msg.type === "exported") {
           downloadBytes(msg.name, msg.format, msg.width, msg.bytes);
           $("status").textContent = "Exported “" + msg.name + "”.";
+        } else if (msg.type === "pick-files") {
+          $("status").textContent = "No selection — pick file(s) to upload.";
+          $("file").click();
         } else if (msg.type === "error") {
           $("status").textContent = "Error: " + msg.message;
         }
