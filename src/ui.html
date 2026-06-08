@@ -74,13 +74,17 @@
         box-shadow: 0 0 0 1px var(--figma-color-bg-brand, #0d99ff);
       }
       .tile .thumb {
-        height: 56px;
+        height: 72px;
         display: flex;
         align-items: center;
         justify-content: center;
         margin-bottom: 4px;
       }
-      .tile .thumb img { max-width: 100%; max-height: 56px; }
+      .tile .thumb img {
+        max-width: 100%;
+        max-height: 72px;
+        object-fit: contain;
+      }
       .tile .name {
         font-size: 10px;
         white-space: nowrap;

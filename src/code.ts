@@ -10,7 +10,7 @@
 // It never *generates* artwork — it only ever instances existing components, which
 // keeps everything brand-approved.
 
-const THUMB_MAX_PX = 120;
+const THUMB_MAX_PX = 200;
 
 interface AssetSummary {
   id: string;
@@ -107,11 +107,19 @@ async function sendCatalog(): Promise<void> {
 /** Export a small PNG thumbnail of a node as a data URI. */
 async function renderThumb(node: SceneNode): Promise<string | null> {
   try {
-    const longest = Math.max(node.width, node.height) || 1;
+    // Size the scale off the node's full rendered bounds (which can exceed its
+    // frame box when art overflows), so the thumbnail isn't oversized.
+    const bounds = node.absoluteRenderBounds;
+    const longest = Math.max(
+      bounds ? bounds.width : node.width,
+      bounds ? bounds.height : node.height
+    ) || 1;
     const scale = Math.min(1, THUMB_MAX_PX / longest);
     const bytes = await node.exportAsync({
       format: "PNG",
       constraint: { type: "SCALE", value: scale },
+      // Export the full artwork, not just whatever fits inside the frame bounds.
+      useAbsoluteBounds: true,
     });
     return `data:image/png;base64,${figma.base64Encode(bytes)}`;
   } catch (_err) {
