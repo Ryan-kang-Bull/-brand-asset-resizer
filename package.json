@@ -1,0 +1,17 @@
+{
+  "name": "brand-asset-resizer",
+  "version": "0.1.0",
+  "description": "Figma plugin that places brand-team assets onto the canvas, resized to product-team presets or custom dimensions.",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json && npm run copy-ui",
+    "copy-ui": "node -e \"require('fs').copyFileSync('src/ui.html','build/ui.html')\"",
+    "watch": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.100.0",
+    "typescript": "^5.6.0"
+  }
+}
