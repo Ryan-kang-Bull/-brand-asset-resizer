@@ -40,29 +40,6 @@
         padding: 6px 8px;
       }
 
-      /* Tabs */
-      #tabs {
-        display: flex;
-        border-bottom: 1px solid var(--figma-color-border, #e5e5e5);
-      }
-      .tab {
-        flex: 1;
-        border: 0;
-        border-radius: 0;
-        background: transparent;
-        padding: 10px;
-        font-weight: 600;
-        color: var(--figma-color-text-secondary, #888);
-        border-bottom: 2px solid transparent;
-      }
-      .tab:hover { background: var(--figma-color-bg-hover, #f5f5f5); }
-      .tab.active {
-        color: var(--figma-color-text, #1a1a1a);
-        border-bottom-color: var(--figma-color-bg-brand, #0d99ff);
-      }
-      .view { display: none; flex: 1; flex-direction: column; min-height: 0; }
-      .view.active { display: flex; }
-
       header {
         display: flex;
         gap: 6px;
@@ -133,28 +110,33 @@
         color: var(--figma-color-text-secondary, #888);
       }
 
-      footer { padding: 10px; border-top: 1px solid var(--figma-color-border, #e5e5e5); }
-      .stack { display: flex; flex-direction: column; gap: 8px; }
+      /* Options panel (appears for the selected artwork) */
+      footer {
+        padding: 10px;
+        border-top: 1px solid var(--figma-color-border, #e5e5e5);
+        background: var(--figma-color-bg-secondary, #fafafa);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      #selname {
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #selname.empty { font-weight: 400; color: var(--figma-color-text-secondary, #888); }
+      #options { display: none; flex-direction: column; gap: 8px; }
+      #options.show { display: flex; }
       .row { display: flex; gap: 6px; align-items: center; }
       .row label { color: var(--figma-color-text-secondary, #888); }
-      #preset, #rpreset { flex: 1; }
-      #w, #h, #rw, #rh, #thr, #mg { width: 60px; }
+      #preset { flex: 1; }
+      #w, #h, #thr, #mg { width: 56px; }
       .grow { flex: 1; }
-      #status, #rstatus {
-        font-size: 10px;
-        color: var(--figma-color-text-secondary, #888);
-        min-height: 13px;
-      }
-
-      /* Resize view */
-      #resize-view .pad { padding: 12px; overflow-y: auto; }
-      .hint {
-        font-size: 10px;
-        color: var(--figma-color-text-secondary, #888);
-        margin: 0 0 4px;
-      }
+      .field { display: flex; flex-direction: column; gap: 3px; }
+      .field > span { color: var(--figma-color-text-secondary, #888); font-size: 10px; }
       .seg { display: flex; }
-      .seg button { border-radius: 0; flex: 1; }
+      .seg button { border-radius: 0; padding: 6px 8px; }
       .seg button:first-child { border-radius: 6px 0 0 6px; }
       .seg button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
       .seg button.on {
@@ -162,96 +144,59 @@
         color: var(--figma-color-text-onbrand, #fff);
         border-color: transparent;
       }
-      .field { display: flex; flex-direction: column; gap: 4px; }
-      .field > span { color: var(--figma-color-text-secondary, #888); }
+      #status { font-size: 10px; color: var(--figma-color-text-secondary, #888); min-height: 13px; }
     </style>
   </head>
   <body>
-    <div id="tabs">
-      <button class="tab active" data-tab="library">Library</button>
-      <button class="tab" data-tab="resize">Resize Frame</button>
+    <header>
+      <input id="search" type="search" placeholder="Search assets…" />
+      <button id="import" title="Convert selected frames to components, or upload files if nothing is selected">↑ Import</button>
+      <button id="refresh" title="Re-scan the file">↻</button>
+      <input id="file" type="file" multiple accept=".svg,.png,.jpg,.jpeg" hidden />
+    </header>
+
+    <div id="grid"></div>
+    <div id="empty">
+      <strong>No components found</strong>
+      <span>Open a file containing the brand component library, then press ↻. Or use
+      Import to bring illustrations in.</span>
     </div>
 
-    <!-- ===================== LIBRARY VIEW ===================== -->
-    <div class="view active" id="library-view">
-      <header>
-        <input id="search" type="search" placeholder="Search assets…" />
-        <button id="import" title="Convert selected frames to components, or upload files if nothing is selected">↑ Import</button>
-        <button id="refresh" title="Re-scan the file">↻</button>
-        <input id="file" type="file" multiple accept=".svg,.png,.jpg,.jpeg" hidden />
-      </header>
+    <footer>
+      <div id="selname" class="empty">Select an artwork to resize it.</div>
 
-      <div id="grid"></div>
-      <div id="empty">
-        <strong>No components found</strong>
-        <span>Open a file containing the brand component library, then press ↻. Or use
-        Import to bring illustrations in.</span>
+      <div id="options">
+        <div class="row">
+          <label for="preset">Size</label>
+          <select id="preset"></select>
+        </div>
+        <div class="row">
+          <div class="field"><span>Width</span><input id="w" type="number" min="1" placeholder="W" /></div>
+          <div class="field"><span>Height</span><input id="h" type="number" min="1" placeholder="keep" /></div>
+          <div class="field"><span>Threshold</span><input id="thr" type="number" min="1" value="768" /></div>
+          <div class="field grow">
+            <span>Anchor</span>
+            <div class="seg" id="anchor">
+              <button data-anchor="left">L</button>
+              <button data-anchor="center" class="on">C</button>
+              <button data-anchor="right">R</button>
+            </div>
+          </div>
+          <div class="field"><span>Margin</span><input id="mg" type="number" min="0" value="0" /></div>
+        </div>
+        <div class="row">
+          <button id="place" class="primary grow">Place on canvas</button>
+          <select id="format" title="Export format">
+            <option>PNG</option>
+            <option>SVG</option>
+            <option>JPG</option>
+          </select>
+          <button id="export">Export</button>
+        </div>
       </div>
 
-      <footer>
-        <div class="stack">
-          <div class="row">
-            <label for="preset">Size</label>
-            <select id="preset"></select>
-          </div>
-          <div class="row">
-            <input id="w" type="number" min="1" placeholder="W" />
-            <span>×</span>
-            <input id="h" type="number" min="1" placeholder="H" />
-            <label class="row grow" style="justify-content:flex-end; gap:4px;">
-              <input id="lock" type="checkbox" checked /> Lock ratio
-            </label>
-          </div>
-          <div class="row">
-            <button id="place" class="primary grow" disabled>Place on canvas</button>
-            <select id="format" title="Export format">
-              <option>PNG</option>
-              <option>SVG</option>
-              <option>JPG</option>
-            </select>
-            <button id="export" disabled>Export</button>
-          </div>
-          <div id="status"></div>
-        </div>
-      </footer>
-    </div>
-
-    <!-- ===================== RESIZE VIEW ===================== -->
-    <div class="view" id="resize-view">
-      <div class="pad stack">
-        <p class="hint">
-          Select one <strong>frame</strong> on the canvas. The background (bottom rectangle)
-          fills the frame; the artwork repositions on wide frames or scales-to-fit on narrow
-          ones; text is left alone.
-        </p>
-
-        <div class="row">
-          <label for="rpreset">Width</label>
-          <select id="rpreset"></select>
-        </div>
-        <div class="row">
-          <div class="field"><span>Width</span><input id="rw" type="number" min="1" placeholder="W" /></div>
-          <div class="field"><span>Height</span><input id="rh" type="number" min="1" placeholder="keep" /></div>
-          <div class="field grow"><span>Threshold</span><input id="thr" type="number" min="1" value="768" /></div>
-        </div>
-
-        <div class="field">
-          <span>Reposition anchor (wide frames)</span>
-          <div class="seg" id="anchor">
-            <button data-anchor="left">Left</button>
-            <button data-anchor="center" class="on">Center</button>
-            <button data-anchor="right">Right</button>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="field"><span>Margin (px)</span><input id="mg" type="number" min="0" value="0" /></div>
-        </div>
-
-        <button id="resizeBtn" class="primary">Resize selected frame</button>
-        <div id="rstatus"></div>
-      </div>
-    </div>
+      <div id="status"></div>
+    </footer>
 
     <script>
       "use strict";
@@ -270,45 +215,46 @@
       function $(id) { return document.getElementById(id); }
       function send(msg) { parent.postMessage({ pluginMessage: msg }, "*"); }
 
-      // ---- Tabs ----
-      var tabs = document.querySelectorAll(".tab");
-      tabs.forEach(function (t) {
-        t.onclick = function () {
-          tabs.forEach(function (x) { x.classList.remove("active"); });
-          t.classList.add("active");
-          document.querySelectorAll(".view").forEach(function (v) { v.classList.remove("active"); });
-          $(t.dataset.tab + "-view").classList.add("active");
-        };
-      });
-
-      // ---- Library ----
       var assets = [];
       var selectedId = null;
+      var anchor = "center";
 
       PRESETS.forEach(function (p, i) {
-        [$("preset"), $("rpreset")].forEach(function (sel) {
-          var opt = document.createElement("option");
-          opt.value = String(i);
-          opt.textContent = p.label;
-          sel.appendChild(opt);
-        });
+        var opt = document.createElement("option");
+        opt.value = String(i);
+        opt.textContent = p.label;
+        $("preset").appendChild(opt);
       });
-      // Resize tab default to a wide preset (LG) so reposition mode shows first.
-      $("rpreset").value = "3";
 
       function selectedAsset() {
         for (var i = 0; i < assets.length; i++) if (assets[i].id === selectedId) return assets[i];
         return null;
       }
-      function setEnabled(on) { $("place").disabled = !on; $("export").disabled = !on; }
+
+      function showOptions(a) {
+        if (a) {
+          $("selname").textContent = a.name;
+          $("selname").classList.remove("empty");
+          $("options").classList.add("show");
+        } else {
+          $("selname").textContent = "Select an artwork to resize it.";
+          $("selname").classList.add("empty");
+          $("options").classList.remove("show");
+        }
+      }
 
       function applyPreset() {
         var p = PRESETS[Number($("preset").value)];
         var a = selectedAsset();
         if (p.w === "custom") return;
-        if (p.w === null) { $("w").value = a ? a.width : ""; $("h").value = a ? a.height : ""; return; }
+        if (p.w === null) { // Original
+          $("w").value = a ? a.width : "";
+          $("h").value = a ? a.height : "";
+          return;
+        }
+        // Breakpoint: set width, keep native height (blank).
         $("w").value = p.w;
-        $("h").value = a ? Math.round((p.w * a.height) / a.width) : "";
+        $("h").value = "";
       }
 
       function buildTile(a) {
@@ -332,7 +278,10 @@
         dims.className = "dims"; dims.textContent = a.width + " × " + a.height;
         tile.appendChild(thumb); tile.appendChild(name); tile.appendChild(dims);
         tile.onclick = function () {
-          selectedId = a.id; renderGrid(); applyPreset(); setEnabled(true);
+          selectedId = a.id;
+          renderGrid();
+          showOptions(a);
+          applyPreset();
         };
         return tile;
       }
@@ -348,22 +297,39 @@
           .forEach(function (a) { grid.appendChild(buildTile(a)); });
       }
 
-      function sizeRequest() {
+      function resizeReq() {
         var w = parseInt($("w").value, 10);
+        if (!selectedId || !w) { $("status").textContent = "Pick an asset and a width."; return null; }
         var h = parseInt($("h").value, 10);
-        if (!selectedId || !w || !h) { $("status").textContent = "Pick an asset and a valid size."; return null; }
-        return { assetId: selectedId, width: w, height: h, lockAspect: $("lock").checked };
+        return {
+          assetId: selectedId,
+          width: w,
+          height: h ? h : null,
+          threshold: parseInt($("thr").value, 10) || 768,
+          anchorH: anchor,
+          margin: parseInt($("mg").value, 10) || 0,
+        };
       }
+
+      // Anchor segmented control
+      $("anchor").querySelectorAll("button").forEach(function (b) {
+        b.onclick = function () {
+          anchor = b.dataset.anchor;
+          $("anchor").querySelectorAll("button").forEach(function (x) { x.classList.remove("on"); });
+          b.classList.add("on");
+        };
+      });
 
       $("search").oninput = renderGrid;
       $("preset").onchange = applyPreset;
       $("refresh").onclick = function () { send({ type: "init" }); };
+
       $("place").onclick = function () {
-        var req = sizeRequest(); if (!req) return;
+        var req = resizeReq(); if (!req) return;
         $("status").textContent = "Placing…"; req.type = "place"; send(req);
       };
       $("export").onclick = function () {
-        var req = sizeRequest(); if (!req) return;
+        var req = resizeReq(); if (!req) return;
         $("status").textContent = "Exporting…"; req.type = "export"; req.format = $("format").value; send(req);
       };
       $("import").onclick = function () {
@@ -400,48 +366,13 @@
         URL.revokeObjectURL(url);
       }
 
-      // ---- Resize tab ----
-      var anchor = "center";
-      $("anchor").querySelectorAll("button").forEach(function (b) {
-        b.onclick = function () {
-          anchor = b.dataset.anchor;
-          $("anchor").querySelectorAll("button").forEach(function (x) { x.classList.remove("on"); });
-          b.classList.add("on");
-        };
-      });
-      function applyRPreset() {
-        var p = PRESETS[Number($("rpreset").value)];
-        if (p.w === "custom" || p.w === null) return;
-        $("rw").value = p.w;
-      }
-      $("rpreset").onchange = applyRPreset;
-      applyRPreset();
-
-      $("resizeBtn").onclick = function () {
-        var w = parseInt($("rw").value, 10);
-        if (!w) { $("rstatus").textContent = "Enter a target width."; return; }
-        var hRaw = parseInt($("rh").value, 10);
-        var thr = parseInt($("thr").value, 10) || 768;
-        var mg = parseInt($("mg").value, 10) || 0;
-        $("rstatus").textContent = "Resizing…";
-        send({
-          type: "resize-frame",
-          width: w,
-          height: hRaw ? hRaw : null,
-          threshold: thr,
-          anchorH: anchor,
-          margin: mg,
-        });
-      };
-
-      // ---- Messages from the main thread ----
       window.onmessage = function (event) {
         var msg = event.data.pluginMessage;
         if (!msg) return;
         if (msg.type === "catalog") {
           assets = msg.assets;
           if (!selectedAsset()) selectedId = null;
-          setEnabled(!!selectedId);
+          showOptions(selectedAsset());
           renderGrid();
           $("status").textContent = assets.length + " asset(s) found.";
         } else if (msg.type === "placed") {
@@ -454,7 +385,6 @@
           $("file").click();
         } else if (msg.type === "error") {
           $("status").textContent = "Error: " + msg.message;
-          $("rstatus").textContent = "Error: " + msg.message;
         }
       };
 
