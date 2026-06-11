@@ -8,6 +8,7 @@
       body {
         display: flex;
         flex-direction: column;
+        overflow-x: hidden;
         font: 11px/1.4 Inter, -apple-system, system-ui, sans-serif;
         color: var(--figma-color-text, #1a1a1a);
         background: var(--figma-color-bg, #fff);
@@ -50,13 +51,15 @@
       #grid {
         flex: 1;
         overflow-y: auto;
+        overflow-x: hidden;
         padding: 10px;
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
         align-content: start;
       }
       .tile {
+        min-width: 0; /* let tiles shrink instead of forcing horizontal scroll */
         border: 1px solid var(--figma-color-border, #e5e5e5);
         border-radius: 8px;
         padding: 6px;
