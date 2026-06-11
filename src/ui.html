@@ -230,8 +230,9 @@
             '<div class="thumb">' +
             (a.preview ? '<img src="' + a.preview + '" />' : "—") +
             "</div>" +
-            '<div class="name" title="' + a.name + '">' + a.name + "</div>" +
-            '<div class="dims">' + a.width + "×" + a.height + "</div>";
+            '<div class="name" title="' + a.name + '">' + (a.name || "(no name)") + "</div>" +
+            '<div class="dims">box ' + a.width + "×" + a.height +
+            " → png " + a.pngW + "×" + a.pngH + "</div>";
           tile.onclick = () => {
             selectedId = a.id;
             renderGrid();

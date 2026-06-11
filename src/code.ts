@@ -18,6 +18,8 @@ interface AssetSummary {
   width: number;
   height: number;
   preview: string | null; // data URI (PNG) or null if it couldn't be rendered
+  pngW: number; // DIAGNOSTIC: actual exported PNG pixel dimensions
+  pngH: number;
 }
 
 type ExportFormat = "PNG" | "SVG" | "JPG";
@@ -91,12 +93,15 @@ async function sendCatalog(): Promise<void> {
 
   const summaries: AssetSummary[] = [];
   for (const node of assets) {
+    const thumb = await renderThumb(node);
     summaries.push({
       id: node.id,
       name: node.name,
       width: Math.round(node.width),
       height: Math.round(node.height),
-      preview: await renderThumb(node),
+      preview: thumb ? thumb.uri : null,
+      pngW: thumb ? thumb.pngW : 0,
+      pngH: thumb ? thumb.pngH : 0,
     });
   }
 
@@ -104,8 +109,10 @@ async function sendCatalog(): Promise<void> {
   figma.ui.postMessage({ type: "catalog", assets: summaries });
 }
 
-/** Export a small PNG thumbnail of a node as a data URI. */
-async function renderThumb(node: SceneNode): Promise<string | null> {
+/** Export a small PNG thumbnail of a node. Returns the data URI + PNG pixel dims. */
+async function renderThumb(
+  node: SceneNode
+): Promise<{ uri: string; pngW: number; pngH: number } | null> {
   // These illustrations crop a larger composition, but setting clipsContent on the
   // node doesn't constrain exportAsync. So wrap a clone inside a fresh clipping
   // frame sized to the node's box and export the wrapper — that reliably cuts the
@@ -134,7 +141,22 @@ async function renderThumb(node: SceneNode): Promise<string | null> {
       format: "PNG",
       constraint: { type: "SCALE", value: scale },
     });
-    return `data:image/png;base64,${figma.base64Encode(bytes)}`;
+    // DIAGNOSTIC: read the PNG's IHDR width/height (big-endian at offsets 16/20)
+    // to see what the export actually produced vs. the node's reported box.
+    const pngW =
+      (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+    const pngH =
+      (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+    console.log(
+      `[thumb] "${node.name}" type=${node.type} box=${Math.round(node.width)}x${Math.round(
+        node.height
+      )} wrapped=${wrapper ? "yes" : "no"} -> png=${pngW}x${pngH} (${bytes.length}b)`
+    );
+    return {
+      uri: `data:image/png;base64,${figma.base64Encode(bytes)}`,
+      pngW,
+      pngH,
+    };
   } catch (_err) {
     return null;
   } finally {
