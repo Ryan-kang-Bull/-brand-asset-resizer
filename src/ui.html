@@ -149,9 +149,9 @@
   </head>
   <body>
     <header>
-      <input id="search" type="search" placeholder="Search assets…" />
-      <button id="import" title="Convert selected frames to components, or upload files if nothing is selected">↑ Import</button>
-      <button id="refresh" title="Re-scan the file">↻</button>
+      <input id="search" type="search" placeholder="Search assets…" title="Filter the library by asset name" />
+      <button id="import" title="Brand team: turn artwork into library components. With frames selected on the canvas, converts them to components; with nothing selected, lets you upload SVG/PNG/JPG files.">↑ Import</button>
+      <button id="refresh" title="Re-scan the open file for components and rebuild the thumbnails">↻</button>
       <input id="file" type="file" multiple accept=".svg,.png,.jpg,.jpeg" hidden />
     </header>
 
@@ -168,30 +168,39 @@
       <div id="options">
         <div class="row">
           <label for="preset">Size</label>
-          <select id="preset"></select>
+          <select id="preset" title="Target size. Breakpoint presets (SM–3XL) set the width to the breakpoint's midpoint; ‘Original’ uses the artwork's native size; ‘Custom’ lets you type both.">
+          </select>
         </div>
         <div class="row">
-          <div class="field"><span>Width</span><input id="w" type="number" min="1" placeholder="W" /></div>
-          <div class="field"><span>Height</span><input id="h" type="number" min="1" placeholder="keep" /></div>
-          <div class="field"><span>Threshold</span><input id="thr" type="number" min="1" value="768" /></div>
-          <div class="field grow">
+          <div class="field" title="Target frame width in pixels">
+            <span>Width</span><input id="w" type="number" min="1" placeholder="W" title="Target frame width in pixels" />
+          </div>
+          <div class="field" title="Target frame height in pixels. Leave blank to keep the artwork's native height and only change the width.">
+            <span>Height</span><input id="h" type="number" min="1" placeholder="keep" title="Target frame height in pixels. Leave blank to keep the artwork's native height." />
+          </div>
+          <div class="field" title="Mode switch. At or ABOVE this width → Reposition mode (artwork keeps its size, moves to the anchor). BELOW it → Scale mode (artwork scales to fit, ratio locked).">
+            <span>Threshold</span><input id="thr" type="number" min="1" value="768" title="Width at/above which the artwork repositions instead of scaling. Default 768." />
+          </div>
+          <div class="field grow" title="In Reposition mode, where the artwork sits horizontally in the frame (left / center / right).">
             <span>Anchor</span>
             <div class="seg" id="anchor">
-              <button data-anchor="left">L</button>
-              <button data-anchor="center" class="on">C</button>
-              <button data-anchor="right">R</button>
+              <button data-anchor="left" title="Pin artwork to the left edge (+ margin)">L</button>
+              <button data-anchor="center" class="on" title="Center the artwork horizontally">C</button>
+              <button data-anchor="right" title="Pin artwork to the right edge (+ margin)">R</button>
             </div>
           </div>
-          <div class="field"><span>Margin</span><input id="mg" type="number" min="0" value="0" /></div>
+          <div class="field" title="Gap in pixels between the artwork and the frame edge (used by the anchor in Reposition mode, and as padding in Scale mode).">
+            <span>Margin</span><input id="mg" type="number" min="0" value="0" title="Gap in px from the frame edge." />
+          </div>
         </div>
         <div class="row">
-          <button id="place" class="primary grow">Place on canvas</button>
-          <select id="format" title="Export format">
+          <button id="place" class="primary grow" title="Place a resized copy on the canvas. It's detached to an editable frame so the background, artwork, and text are independent layers.">Place on canvas</button>
+          <select id="format" title="File format for Export (PNG = raster, SVG = vector, JPG = flattened)">
             <option>PNG</option>
             <option>SVG</option>
             <option>JPG</option>
           </select>
-          <button id="export">Export</button>
+          <button id="export" title="Download the resized artwork as a file in the chosen format">Export</button>
         </div>
       </div>
 
