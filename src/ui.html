@@ -145,6 +145,43 @@
         border-color: transparent;
       }
       #status { font-size: 10px; color: var(--figma-color-text-secondary, #888); min-height: 13px; }
+
+      /* "?" help icons + popover */
+      .help {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 13px;
+        height: 13px;
+        margin-left: 3px;
+        border-radius: 50%;
+        border: 1px solid var(--figma-color-border, #c8c8c8);
+        color: var(--figma-color-text-secondary, #888);
+        font: 700 9px/1 sans-serif;
+        cursor: pointer;
+        user-select: none;
+        vertical-align: middle;
+      }
+      .help:hover {
+        background: var(--figma-color-bg-brand, #0d99ff);
+        border-color: transparent;
+        color: #fff;
+      }
+      #pop {
+        position: fixed;
+        display: none;
+        max-width: 230px;
+        padding: 8px 10px;
+        background: var(--figma-color-bg, #fff);
+        color: var(--figma-color-text, #1a1a1a);
+        border: 1px solid var(--figma-color-border, #d0d0d0);
+        border-radius: 6px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        font-size: 10px;
+        line-height: 1.45;
+        z-index: 1000;
+      }
+      #pop.show { display: block; }
     </style>
   </head>
   <body>
@@ -168,39 +205,44 @@
       <div id="options">
         <div class="row">
           <label for="preset">Size</label>
-          <select id="preset" title="Target size. Breakpoint presets (SM–3XL) set the width to the breakpoint's midpoint; ‘Original’ uses the artwork's native size; ‘Custom’ lets you type both.">
-          </select>
+          <i class="help" data-help="Target size. Breakpoint presets (SM–3XL) set the width to the breakpoint's midpoint. ‘Original’ uses the artwork's native size. ‘Custom’ lets you type both width and height.">?</i>
+          <select id="preset"></select>
         </div>
         <div class="row">
-          <div class="field" title="Target frame width in pixels">
-            <span>Width</span><input id="w" type="number" min="1" placeholder="W" title="Target frame width in pixels" />
+          <div class="field">
+            <span>Width <i class="help" data-help="Target frame width in pixels.">?</i></span>
+            <input id="w" type="number" min="1" placeholder="W" />
           </div>
-          <div class="field" title="Target frame height in pixels. Leave blank to keep the artwork's native height and only change the width.">
-            <span>Height</span><input id="h" type="number" min="1" placeholder="keep" title="Target frame height in pixels. Leave blank to keep the artwork's native height." />
+          <div class="field">
+            <span>Height <i class="help" data-help="Target frame height in pixels. Leave blank to keep the artwork's native height and only change the width.">?</i></span>
+            <input id="h" type="number" min="1" placeholder="keep" />
           </div>
-          <div class="field" title="Mode switch. At or ABOVE this width → Reposition mode (artwork keeps its size, moves to the anchor). BELOW it → Scale mode (artwork scales to fit, ratio locked).">
-            <span>Threshold</span><input id="thr" type="number" min="1" value="768" title="Width at/above which the artwork repositions instead of scaling. Default 768." />
+          <div class="field">
+            <span>Threshold <i class="help" data-help="Mode switch by width. At or ABOVE this width → Reposition mode: the artwork keeps its exact size and moves to the anchor. BELOW it → Scale mode: the artwork scales to fit the frame, ratio locked. Default 768.">?</i></span>
+            <input id="thr" type="number" min="1" value="768" />
           </div>
-          <div class="field grow" title="In Reposition mode, where the artwork sits horizontally in the frame (left / center / right).">
-            <span>Anchor</span>
+          <div class="field grow">
+            <span>Anchor <i class="help" data-help="Reposition mode only: where the artwork sits horizontally in the frame — Left edge, Center, or Right edge (offset by the margin).">?</i></span>
             <div class="seg" id="anchor">
-              <button data-anchor="left" title="Pin artwork to the left edge (+ margin)">L</button>
-              <button data-anchor="center" class="on" title="Center the artwork horizontally">C</button>
-              <button data-anchor="right" title="Pin artwork to the right edge (+ margin)">R</button>
+              <button data-anchor="left">L</button>
+              <button data-anchor="center" class="on">C</button>
+              <button data-anchor="right">R</button>
             </div>
           </div>
-          <div class="field" title="Gap in pixels between the artwork and the frame edge (used by the anchor in Reposition mode, and as padding in Scale mode).">
-            <span>Margin</span><input id="mg" type="number" min="0" value="0" title="Gap in px from the frame edge." />
+          <div class="field">
+            <span>Margin <i class="help" data-help="Gap in pixels from the frame edge. Used by the anchor in Reposition mode, and as padding when fitting in Scale mode.">?</i></span>
+            <input id="mg" type="number" min="0" value="0" />
           </div>
         </div>
         <div class="row">
-          <button id="place" class="primary grow" title="Place a resized copy on the canvas. It's detached to an editable frame so the background, artwork, and text are independent layers.">Place on canvas</button>
-          <select id="format" title="File format for Export (PNG = raster, SVG = vector, JPG = flattened)">
+          <button id="place" class="primary grow">Place on canvas</button>
+          <i class="help" data-help="Place puts a resized copy on the canvas, detached to an editable frame (background, artwork, and text become independent layers). Export downloads it as a file in the chosen format — PNG (raster), SVG (vector), or JPG (flattened).">?</i>
+          <select id="format">
             <option>PNG</option>
             <option>SVG</option>
             <option>JPG</option>
           </select>
-          <button id="export" title="Download the resized artwork as a file in the chosen format">Export</button>
+          <button id="export">Export</button>
         </div>
       </div>
 
@@ -223,6 +265,31 @@
 
       function $(id) { return document.getElementById(id); }
       function send(msg) { parent.postMessage({ pluginMessage: msg }, "*"); }
+
+      // "?" help popover (native title tooltips don't render in Figma's iframe).
+      var pop = document.createElement("div");
+      pop.id = "pop";
+      document.body.appendChild(pop);
+      document.addEventListener("click", function (e) {
+        var t = e.target;
+        if (t && t.classList && t.classList.contains("help")) {
+          if (pop.classList.contains("show") && pop.dataset.for === t.dataset.help) {
+            pop.classList.remove("show"); // click same icon again to close
+            return;
+          }
+          pop.textContent = t.getAttribute("data-help") || "";
+          pop.dataset.for = t.dataset.help;
+          pop.classList.add("show");
+          var r = t.getBoundingClientRect();
+          var left = Math.min(r.left, window.innerWidth - pop.offsetWidth - 8);
+          var top = r.bottom + 6;
+          if (top + pop.offsetHeight > window.innerHeight) top = r.top - pop.offsetHeight - 6;
+          pop.style.left = Math.max(8, left) + "px";
+          pop.style.top = Math.max(8, top) + "px";
+        } else {
+          pop.classList.remove("show");
+        }
+      });
 
       var assets = [];
       var selectedId = null;
