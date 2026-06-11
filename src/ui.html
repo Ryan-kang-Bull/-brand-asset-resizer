@@ -166,7 +166,7 @@
         <button id="export" disabled>Export</button>
       </div>
       <div id="status"></div>
-      <div style="font-size:9px; color:#c00; font-weight:600;">BUILD v7 · diagnostics on</div>
+      <div style="font-size:9px; color:#c00; font-weight:600;">BUILD v8 · diagnostics on</div>
     </footer>
 
     <script>
@@ -350,8 +350,22 @@
           assets = msg.assets;
           if (!selectedAsset()) selectedId = null;
           setEnabled(!!selectedId);
-          renderGrid();
-          $("status").textContent = assets.length + " brand asset(s) found.";
+          // DIAGNOSTIC: surface the first asset's numbers + catch any render crash
+          // in the status bar, which renders independently of the tiles.
+          var diag = "";
+          if (assets[0]) {
+            var a0 = assets[0];
+            diag =
+              " · #1 box " + a0.width + "×" + a0.height +
+              " png " + a0.pngW + "×" + a0.pngH +
+              " name=" + JSON.stringify(a0.name);
+          }
+          try {
+            renderGrid();
+            $("status").textContent = assets.length + " found" + diag;
+          } catch (e) {
+            $("status").textContent = "renderGrid ERROR: " + e.message + diag;
+          }
         } else if (msg.type === "placed") {
           $("status").textContent = "Placed “" + msg.name + "”.";
         } else if (msg.type === "exported") {
