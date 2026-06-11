@@ -24,12 +24,21 @@ interface ImportFile {
   bytes?: Uint8Array; // for PNG/JPG uploads
 }
 
+interface ResizeFrameRequest {
+  width: number;
+  height: number | null; // null → keep the frame's current height
+  threshold: number; // width at/above which we reposition instead of scale
+  anchorH: "left" | "center" | "right";
+  margin: number;
+}
+
 type UIMessage =
   | { type: "init" }
   | ({ type: "place" } & SizeRequest)
   | ({ type: "export"; format: ExportFormat } & SizeRequest)
   | { type: "import-selection" }
-  | { type: "import-files"; files: ImportFile[] };
+  | { type: "import-files"; files: ImportFile[] }
+  | ({ type: "resize-frame" } & ResizeFrameRequest);
 
 figma.showUI(__html__, { width: 380, height: 600, themeColors: true });
 
@@ -45,6 +54,8 @@ figma.ui.onmessage = async (msg: UIMessage) => {
       await importSelection();
     } else if (msg.type === "import-files") {
       await importFiles(msg.files);
+    } else if (msg.type === "resize-frame") {
+      await resizeFrame(msg);
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -258,4 +269,119 @@ async function importFiles(files: ImportFile[]): Promise<void> {
     figma.notify(`Imported ${created.length} illustration(s)`);
   }
   await sendCatalog();
+}
+
+// --- Context-aware frame resize -------------------------------------------
+
+/**
+ * Classify a frame's children by role using type + z-order:
+ *   background = bottommost RECTANGLE (children[0] is the bottom of the stack)
+ *   text       = TEXT nodes (independent; left untouched)
+ *   assets     = everything else (the vector illustration), treated as one unit
+ */
+function classifyFrame(frame: FrameNode): {
+  background: RectangleNode | null;
+  assets: SceneNode[];
+} {
+  const kids = frame.children;
+  let background: RectangleNode | null = null;
+  for (const k of kids) {
+    if (k.type === "RECTANGLE") {
+      background = k;
+      break;
+    }
+  }
+  const assets = kids.filter(
+    (k) => k !== (background as SceneNode | null) && k.type !== "TEXT"
+  );
+  return { background, assets };
+}
+
+/**
+ * Resize the selected frame, treating its layers by role:
+ *   - background scales to fill 100% of the frame
+ *   - asset repositions (wide frames) or scales-to-fit, ratio locked (narrow frames)
+ *   - text is left alone
+ */
+async function resizeFrame(req: ResizeFrameRequest): Promise<void> {
+  const sel = figma.currentPage.selection;
+  if (sel.length !== 1) {
+    throw new Error("Select exactly one frame to resize.");
+  }
+  const frame = sel[0];
+  if (frame.type !== "FRAME") {
+    throw new Error("Selection must be a Frame (not a group, instance, or component).");
+  }
+
+  const W = Math.max(1, Math.round(req.width));
+  const H = Math.max(1, Math.round(req.height != null ? req.height : frame.height));
+  const margin = Math.max(0, req.margin);
+
+  const { background, assets } = classifyFrame(frame);
+  if (assets.length === 0) {
+    throw new Error("No asset layer found above the background.");
+  }
+
+  // Combined bounding box of the asset layer(s), in frame-local coords, pre-resize.
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const a of assets) {
+    minX = Math.min(minX, a.x);
+    minY = Math.min(minY, a.y);
+    maxX = Math.max(maxX, a.x + a.width);
+    maxY = Math.max(maxY, a.y + a.height);
+  }
+  const bw = maxX - minX;
+  const bh = maxY - minY;
+
+  // Resize the frame itself without disturbing child positions/sizes; we place
+  // the background and asset explicitly below.
+  frame.resizeWithoutConstraints(W, H);
+
+  // Background always fills the frame. Gradients are normalized to the layer, so
+  // resizing keeps stops proportional (no manual remap needed).
+  if (background) {
+    background.x = 0;
+    background.y = 0;
+    background.resize(W, H);
+  }
+
+  const reposition = W >= req.threshold;
+  if (reposition) {
+    // Keep the asset's exact dimensions; move it to the chosen anchor.
+    let targetX: number;
+    if (req.anchorH === "left") targetX = margin;
+    else if (req.anchorH === "right") targetX = W - bw - margin;
+    else targetX = (W - bw) / 2;
+    const targetY = (H - bh) / 2;
+    const dx = targetX - minX;
+    const dy = targetY - minY;
+    for (const a of assets) {
+      a.x += dx;
+      a.y += dy;
+    }
+  } else {
+    // Scale to fit the limiting dimension, ratio locked, then center.
+    const factor = Math.min((W - 2 * margin) / bw, (H - 2 * margin) / bh);
+    const originX = (W - bw * factor) / 2;
+    const originY = (H - bh * factor) / 2;
+    for (const a of assets) {
+      const relX = (a.x - minX) * factor;
+      const relY = (a.y - minY) * factor;
+      if ("rescale" in a && factor > 0) {
+        a.rescale(factor); // scales strokes/radii too; anchors top-left
+      } else if ("resize" in a) {
+        a.resize(Math.max(1, a.width * factor), Math.max(1, a.height * factor));
+      }
+      a.x = originX + relX;
+      a.y = originY + relY;
+    }
+  }
+
+  figma.currentPage.selection = [frame];
+  figma.notify(
+    `Resized to ${W}×${H} · ${reposition ? "reposition" : "scale"} mode`
+  );
 }
