@@ -125,6 +125,19 @@ async function buildResizedFrame(req: PlaceRequest): Promise<FrameNode> {
   // Detach so the inner layers (background / artwork / text) become editable.
   const frame = instance.detachInstance();
 
+  // Ensure the parent frame has a fill so resized output is never transparent.
+  // Use the frame's own fill if it has one, otherwise pull from the bottommost rectangle.
+  const existingFills = frame.fills as readonly Paint[];
+  if (!existingFills || existingFills.length === 0) {
+    const bg = classifyFrame(frame).background;
+    if (bg) {
+      const bgFills = bg.fills as readonly Paint[];
+      if (bgFills && bgFills.length > 0) {
+        frame.fills = bgFills.slice();
+      }
+    }
+  }
+
   const W = Math.max(1, Math.round(req.width));
   const H = Math.max(1, Math.round(req.height != null ? req.height : frame.height));
   applyContextResize(frame, W, H, req.threshold, req.anchorH, req.margin);
