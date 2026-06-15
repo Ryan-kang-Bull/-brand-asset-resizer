@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex;
+        flex-direction: column;
+        overflow-x: hidden;
+        font: 11px/1.4 Inter, -apple-system, system-ui, sans-serif;
+        color: var(--figma-color-text, #1a1a1a);
+        background: var(--figma-color-bg, #fff);
+      }
+      button {
+        font: inherit;
+        border: 1px solid var(--figma-color-border, #d0d0d0);
+        border-radius: 6px;
+        background: var(--figma-color-bg-secondary, #f5f5f5);
+        color: inherit;
+        padding: 6px 10px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      button:hover { background: var(--figma-color-bg-hover, #ececec); }
+      button.primary {
+        background: var(--figma-color-bg-brand, #0d99ff);
+        border-color: transparent;
+        color: var(--figma-color-text-onbrand, #fff);
+        font-weight: 600;
+      }
+      button:disabled { opacity: 0.4; cursor: not-allowed; }
+      input, select {
+        font: inherit;
+        color: inherit;
+        background: var(--figma-color-bg, #fff);
+        border: 1px solid var(--figma-color-border, #d0d0d0);
+        border-radius: 6px;
+        padding: 6px 8px;
+      }
+
+      header {
+        display: flex;
+        gap: 6px;
+        padding: 10px;
+        border-bottom: 1px solid var(--figma-color-border, #e5e5e5);
+      }
+      #search { flex: 1; }
+
+      #grid {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 10px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        align-content: start;
+      }
+      .tile {
+        min-width: 0;
+        border: 1px solid var(--figma-color-border, #e5e5e5);
+        border-radius: 8px;
+        padding: 6px;
+        cursor: pointer;
+        background: var(--figma-color-bg, #fff);
+      }
+      .tile.sel {
+        border-color: var(--figma-color-bg-brand, #0d99ff);
+        box-shadow: 0 0 0 1px var(--figma-color-bg-brand, #0d99ff);
+      }
+      .tile .thumb {
+        width: 100%;
+        height: 130px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 6px;
+        border-radius: 4px;
+        background-color: #f4f4f4;
+        background-image:
+          linear-gradient(45deg, #e2e2e2 25%, transparent 25%),
+          linear-gradient(-45deg, #e2e2e2 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #e2e2e2 75%),
+          linear-gradient(-45deg, transparent 75%, #e2e2e2 75%);
+        background-size: 14px 14px;
+        background-position: 0 0, 0 7px, 7px -7px, -7px 0;
+      }
+      .tile .thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+      .tile .thumb .none { color: var(--figma-color-text-secondary, #999); }
+      .tile .name {
+        font-size: 11px;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .tile .dims { font-size: 10px; color: var(--figma-color-text-secondary, #888); }
+
+      #empty {
+        flex: 1;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 28px;
+        text-align: center;
+        color: var(--figma-color-text-secondary, #888);
+      }
+
+      /* Options panel (appears for the selected artwork) */
+      footer {
+        padding: 10px;
+        border-top: 1px solid var(--figma-color-border, #e5e5e5);
+        background: var(--figma-color-bg-secondary, #fafafa);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      #selname {
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #selname.empty { font-weight: 400; color: var(--figma-color-text-secondary, #888); }
+      #options { display: none; flex-direction: column; gap: 8px; }
+      #options.show { display: flex; }
+      .row { display: flex; gap: 6px; align-items: center; }
+      .row label { color: var(--figma-color-text-secondary, #888); }
+      #preset { flex: 1; }
+      #w, #h, #thr, #mg { width: 56px; }
+      .grow { flex: 1; }
+      .field { display: flex; flex-direction: column; gap: 3px; }
+      .field > span { color: var(--figma-color-text-secondary, #888); font-size: 10px; }
+      .seg { display: flex; }
+      .seg button { border-radius: 0; padding: 6px 8px; }
+      .seg button:first-child { border-radius: 6px 0 0 6px; }
+      .seg button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
+      .seg button.on {
+        background: var(--figma-color-bg-brand, #0d99ff);
+        color: var(--figma-color-text-onbrand, #fff);
+        border-color: transparent;
+      }
+      #status { font-size: 10px; color: var(--figma-color-text-secondary, #888); min-height: 13px; }
+
+      /* "?" help icons + popover */
+      .help {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 13px;
+        height: 13px;
+        margin-left: 3px;
+        border-radius: 50%;
+        border: 1px solid var(--figma-color-border, #c8c8c8);
+        color: var(--figma-color-text-secondary, #888);
+        font: 700 9px/1 sans-serif;
+        cursor: pointer;
+        user-select: none;
+        vertical-align: middle;
+      }
+      .help:hover {
+        background: var(--figma-color-bg-brand, #0d99ff);
+        border-color: transparent;
+        color: #fff;
+      }
+      #pop {
+        position: fixed;
+        display: none;
+        max-width: 230px;
+        padding: 8px 10px;
+        background: var(--figma-color-bg, #fff);
+        color: var(--figma-color-text, #1a1a1a);
+        border: 1px solid var(--figma-color-border, #d0d0d0);
+        border-radius: 6px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        font-size: 10px;
+        line-height: 1.45;
+        z-index: 1000;
+      }
+      #pop.show { display: block; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <input id="search" type="search" placeholder="Search assets…" title="Filter the library by asset name" />
+      <button id="import" title="Brand team: turn artwork into library components. With frames selected on the canvas, converts them to components; with nothing selected, lets you upload SVG/PNG/JPG files.">↑ Import</button>
+      <button id="refresh" title="Re-scan the open file for components and rebuild the thumbnails">↻</button>
+      <input id="file" type="file" multiple accept=".svg,.png,.jpg,.jpeg" hidden />
+    </header>
+
+    <div id="grid"></div>
+    <div id="empty">
+      <strong>No components found</strong>
+      <span>Open a file containing the brand component library, then press ↻. Or use
+      Import to bring illustrations in.</span>
+    </div>
+
+    <footer>
+      <div id="selname" class="empty">Select an artwork to resize it.</div>
+
+      <div id="options">
+        <div class="row">
+          <label for="preset">Size</label>
+          <i class="help" data-help="Target size. Breakpoint presets (SM–3XL) set the width to the breakpoint's midpoint. ‘Original’ uses the artwork's native size. ‘Custom’ lets you type both width and height.">?</i>
+          <select id="preset"></select>
+        </div>
+        <div class="row">
+          <div class="field">
+            <span>Width <i class="help" data-help="Target frame width in pixels.">?</i></span>
+            <input id="w" type="number" min="1" placeholder="W" />
+          </div>
+          <div class="field">
+            <span>Height <i class="help" data-help="Target frame height in pixels. Leave blank to keep the artwork's native height and only change the width.">?</i></span>
+            <input id="h" type="number" min="1" placeholder="keep" />
+          </div>
+          <div class="field">
+            <span>Threshold <i class="help" data-help="Mode switch by width. At or ABOVE this width → Reposition mode: the artwork keeps its exact size and moves to the anchor. BELOW it → Scale mode: the artwork scales to fit the frame, ratio locked. Default 768.">?</i></span>
+            <input id="thr" type="number" min="1" value="768" />
+          </div>
+          <div class="field grow">
+            <span>Anchor <i class="help" data-help="Reposition mode only: where the artwork sits horizontally in the frame — Left edge, Center, or Right edge (offset by the margin).">?</i></span>
+            <div class="seg" id="anchor">
+              <button data-anchor="left">L</button>
+              <button data-anchor="center" class="on">C</button>
+              <button data-anchor="right">R</button>
+            </div>
+          </div>
+          <div class="field">
+            <span>Margin <i class="help" data-help="Gap in pixels from the frame edge. Used by the anchor in Reposition mode, and as padding when fitting in Scale mode.">?</i></span>
+            <input id="mg" type="number" min="0" value="0" />
+          </div>
+        </div>
+        <div class="row">
+          <button id="place" class="primary grow">Place on canvas</button>
+          <i class="help" data-help="Place puts a resized copy on the canvas, detached to an editable frame (background, artwork, and text become independent layers). Export downloads it as a file in the chosen format — PNG (raster), SVG (vector), or JPG (flattened).">?</i>
+          <select id="format">
+            <option>PNG</option>
+            <option>SVG</option>
+            <option>JPG</option>
+          </select>
+          <button id="export">Export</button>
+        </div>
+      </div>
+
+      <div id="status"></div>
+    </footer>
+
+    <script>
+      "use strict";
+
+      var PRESETS = [
+        { label: "Original size", w: null },
+        { label: "SM · 544px  (320–767)", w: 544 },
+        { label: "MD · 896px  (768–1023)", w: 896 },
+        { label: "LG · 1152px  (1024–1279)", w: 1152 },
+        { label: "XL · 1360px  (1280–1439)", w: 1360 },
+        { label: "2XL · 1584px  (1440–1727)", w: 1584 },
+        { label: "3XL · 1728px  (1728+)", w: 1728 },
+        { label: "Custom…", w: "custom" },
+      ];
+
+      function $(id) { return document.getElementById(id); }
+      function send(msg) { parent.postMessage({ pluginMessage: msg }, "*"); }
+
+      // "?" help popover (native title tooltips don't render in Figma's iframe).
+      var pop = document.createElement("div");
+      pop.id = "pop";
+      document.body.appendChild(pop);
+      document.addEventListener("click", function (e) {
+        var t = e.target;
+        if (t && t.classList && t.classList.contains("help")) {
+          if (pop.classList.contains("show") && pop.dataset.for === t.dataset.help) {
+            pop.classList.remove("show"); // click same icon again to close
+            return;
+          }
+          pop.textContent = t.getAttribute("data-help") || "";
+          pop.dataset.for = t.dataset.help;
+          pop.classList.add("show");
+          var r = t.getBoundingClientRect();
+          var left = Math.min(r.left, window.innerWidth - pop.offsetWidth - 8);
+          var top = r.bottom + 6;
+          if (top + pop.offsetHeight > window.innerHeight) top = r.top - pop.offsetHeight - 6;
+          pop.style.left = Math.max(8, left) + "px";
+          pop.style.top = Math.max(8, top) + "px";
+        } else {
+          pop.classList.remove("show");
+        }
+      });
+
+      var assets = [];
+      var selectedId = null;
+      var anchor = "center";
+
+      PRESETS.forEach(function (p, i) {
+        var opt = document.createElement("option");
+        opt.value = String(i);
+        opt.textContent = p.label;
+        $("preset").appendChild(opt);
+      });
+
+      function selectedAsset() {
+        for (var i = 0; i < assets.length; i++) if (assets[i].id === selectedId) return assets[i];
+        return null;
+      }
+
+      function showOptions(a) {
+        if (a) {
+          $("selname").textContent = a.name;
+          $("selname").classList.remove("empty");
+          $("options").classList.add("show");
+        } else {
+          $("selname").textContent = "Select an artwork to resize it.";
+          $("selname").classList.add("empty");
+          $("options").classList.remove("show");
+        }
+      }
+
+      function applyPreset() {
+        var p = PRESETS[Number($("preset").value)];
+        var a = selectedAsset();
+        if (p.w === "custom") return;
+        if (p.w === null) { // Original
+          $("w").value = a ? a.width : "";
+          $("h").value = a ? a.height : "";
+          return;
+        }
+        // Breakpoint: set width, keep native height (blank).
+        $("w").value = p.w;
+        $("h").value = "";
+      }
+
+      function buildTile(a) {
+        var tile = document.createElement("div");
+        tile.className = "tile" + (a.id === selectedId ? " sel" : "");
+        var thumb = document.createElement("div");
+        thumb.className = "thumb";
+        if (a.preview) {
+          var img = document.createElement("img");
+          img.src = a.preview;
+          thumb.appendChild(img);
+        } else {
+          var none = document.createElement("span");
+          none.className = "none";
+          none.textContent = "no preview";
+          thumb.appendChild(none);
+        }
+        var name = document.createElement("div");
+        name.className = "name"; name.title = a.name; name.textContent = a.name;
+        var dims = document.createElement("div");
+        dims.className = "dims"; dims.textContent = a.width + " × " + a.height;
+        tile.appendChild(thumb); tile.appendChild(name); tile.appendChild(dims);
+        tile.onclick = function () {
+          selectedId = a.id;
+          renderGrid();
+          showOptions(a);
+          applyPreset();
+        };
+        return tile;
+      }
+
+      function renderGrid() {
+        var q = $("search").value.trim().toLowerCase();
+        var grid = $("grid");
+        grid.textContent = "";
+        $("empty").style.display = assets.length === 0 ? "flex" : "none";
+        grid.style.display = assets.length === 0 ? "none" : "grid";
+        assets
+          .filter(function (a) { return a.name.toLowerCase().indexOf(q) !== -1; })
+          .forEach(function (a) { grid.appendChild(buildTile(a)); });
+      }
+
+      function resizeReq() {
+        var w = parseInt($("w").value, 10);
+        if (!selectedId || !w) { $("status").textContent = "Pick an asset and a width."; return null; }
+        var h = parseInt($("h").value, 10);
+        return {
+          assetId: selectedId,
+          width: w,
+          height: h ? h : null,
+          threshold: parseInt($("thr").value, 10) || 768,
+          anchorH: anchor,
+          margin: parseInt($("mg").value, 10) || 0,
+        };
+      }
+
+      // Anchor segmented control
+      $("anchor").querySelectorAll("button").forEach(function (b) {
+        b.onclick = function () {
+          anchor = b.dataset.anchor;
+          $("anchor").querySelectorAll("button").forEach(function (x) { x.classList.remove("on"); });
+          b.classList.add("on");
+        };
+      });
+
+      $("search").oninput = renderGrid;
+      $("preset").onchange = applyPreset;
+      $("refresh").onclick = function () { send({ type: "init" }); };
+
+      $("place").onclick = function () {
+        var req = resizeReq(); if (!req) return;
+        $("status").textContent = "Placing…"; req.type = "place"; send(req);
+      };
+      $("export").onclick = function () {
+        var req = resizeReq(); if (!req) return;
+        $("status").textContent = "Exporting…"; req.type = "export"; req.format = $("format").value; send(req);
+      };
+      $("import").onclick = function () {
+        $("status").textContent = "Importing selection…"; send({ type: "import-selection" });
+      };
+      $("file").onchange = async function (e) {
+        var files = Array.prototype.slice.call(e.target.files || []);
+        if (!files.length) return;
+        $("status").textContent = "Reading " + files.length + " file(s)…";
+        var payload = [];
+        for (var i = 0; i < files.length; i++) {
+          var f = files[i];
+          var ext = (f.name.split(".").pop() || "").toLowerCase();
+          var name = f.name.replace(/\.[^.]+$/, "");
+          if (ext === "svg") payload.push({ name: name, format: "SVG", svg: await f.text() });
+          else {
+            var buf = await f.arrayBuffer();
+            payload.push({ name: name, format: ext === "png" ? "PNG" : "JPG", bytes: new Uint8Array(buf) });
+          }
+        }
+        $("status").textContent = "Importing " + payload.length + " file(s)…";
+        send({ type: "import-files", files: payload });
+        e.target.value = "";
+      };
+
+      function download(name, format, width, bytes) {
+        var mime = format === "SVG" ? "image/svg+xml" : format === "JPG" ? "image/jpeg" : "image/png";
+        var blob = new Blob([bytes], { type: mime });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = name.replace(/[^\w.-]+/g, "_") + "-" + width + "." + format.toLowerCase();
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      window.onmessage = function (event) {
+        var msg = event.data.pluginMessage;
+        if (!msg) return;
+        if (msg.type === "catalog") {
+          assets = msg.assets;
+          if (!selectedAsset()) selectedId = null;
+          showOptions(selectedAsset());
+          renderGrid();
+          $("status").textContent = assets.length + " asset(s) found.";
+        } else if (msg.type === "placed") {
+          $("status").textContent = "Placed “" + msg.name + "”.";
+        } else if (msg.type === "exported") {
+          download(msg.name, msg.format, msg.width, msg.bytes);
+          $("status").textContent = "Exported “" + msg.name + "”.";
+        } else if (msg.type === "pick-files") {
+          $("status").textContent = "Nothing selected — choose file(s).";
+          $("file").click();
+        } else if (msg.type === "error") {
+          $("status").textContent = "Error: " + msg.message;
+        }
+      };
+
+      send({ type: "init" });
+    </script>
+  </body>
+</html>

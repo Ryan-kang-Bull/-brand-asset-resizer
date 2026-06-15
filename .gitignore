@@ -1,4 +1,6 @@
 node_modules/
-build/
 *.log
 .DS_Store
+
+# build/ is intentionally committed so the plugin can be imported straight from a
+# clone (designers don't need Node). Rebuild with `npm run build` after editing src/.
