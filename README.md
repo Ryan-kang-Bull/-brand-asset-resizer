@@ -108,6 +108,12 @@ Because Figma has no API to *enumerate* a library's contents, the catalog of
 keys ships with the plugin as **`catalog.json`** and is baked into `build/code.js`
 at build time. Updating the shared set is a publish-and-rebuild cycle:
 
+> **Current contents:** the catalog is populated from the published
+> **🍱 CD Visual Library – Grab and Go** team library — **67 assets** (14
+> background graphics, 31 dark illustrations, 11 light illustrations, 11
+> textures). Regenerate it with the **⤓ Catalog** workflow below whenever that
+> library changes.
+
 ### Brand-team workflow
 
 1. In the **Brand Assets source file**, add components with **↑ Import** (or
@@ -121,13 +127,8 @@ at build time. Updating the shared set is a publish-and-rebuild cycle:
 
 ### Product-team setup
 
-Enable the **Brand Assets** library for your file (Assets panel → Libraries).
-Library assets then place/export exactly like local ones.
-
-> **Distribution note:** for "republish once, everyone updates," the plugin
-> should be published to your Figma **org's private plugins**. With per-user
-> *Development* installs, each user must re-pull this repo to get catalog
-> updates.
+Enable the **🍱 CD Visual Library – Grab and Go** library for your file (Assets
+panel → Libraries). Library assets then place/export exactly like local ones.
 
 ---
 
@@ -180,12 +181,25 @@ npm run watch      # rebuild on change
 npm run typecheck  # type-check without emitting
 ```
 
-## Load in Figma
+## Load in Figma (development)
 
 1. Figma desktop → **Plugins → Development → Import plugin from manifest…**
 2. Select `manifest.json` in this folder.
-3. Open a file containing the brand component library and run
-   **Plugins → Development → Brand Asset Resizer**.
+3. Run **Plugins → Development → Brand Asset Resizer** from any file.
 
 > If you move this folder, Figma keeps pointing at the old path — remove and
 > re-import the manifest from the new location.
+
+## Distribute to the team
+
+A *Development* install only exists on the machine that imported it, and reads
+this folder's `build/` directly — product designers can't use it that way. To
+ship it to everyone:
+
+1. **Publish org-private:** Figma → **Plugins → Development → Brand Asset
+   Resizer → Publish…** → choose **"Only for [your org]"** (not the public
+   community). Designers then find it under **Plugins** and install once.
+2. **Updating assets later:** regenerate `catalog.json` (⤓ Catalog), `npm run
+   build`, then **republish the plugin** — installed users get the new version
+   automatically. (Per-user *Development* installs would instead each need to
+   re-pull this repo, which is why org-publishing is preferred.)
