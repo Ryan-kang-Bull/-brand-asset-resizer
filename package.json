@@ -5,7 +5,8 @@
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
-    "build": "tsc -p tsconfig.json && npm run copy-ui",
+    "build": "tsc -p tsconfig.json && npm run inject-catalog && npm run copy-ui",
+    "inject-catalog": "node scripts/inject-catalog.js",
     "copy-ui": "node -e \"require('fs').copyFileSync('src/ui.html','build/ui.html')\"",
     "watch": "tsc -p tsconfig.json --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit"

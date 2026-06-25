@@ -9,6 +9,11 @@
 //   - text is left alone
 // The brand team can import illustrations (canvas frames or uploaded files) as components.
 const THUMB_MAX_PX = 240;
+// Injected from catalog.json at build time (scripts/inject-catalog.js). Do not
+// edit the literal directly — edit catalog.json and rebuild.
+const SHARED_CATALOG = [];
+// Rebuilt on every sendCatalog(); maps the UI's selection id → how to resolve it.
+const assetIndex = new Map();
 figma.showUI(__html__, { width: 380, height: 640, themeColors: true });
 figma.ui.onmessage = async (msg) => {
     try {
@@ -27,6 +32,9 @@ figma.ui.onmessage = async (msg) => {
         else if (msg.type === "import-files") {
             await importFiles(msg.files);
         }
+        else if (msg.type === "build-catalog") {
+            await buildCatalogFromFile();
+        }
     }
     catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -37,6 +45,34 @@ figma.ui.onmessage = async (msg) => {
 };
 // --- Catalog ---------------------------------------------------------------
 async function sendCatalog() {
+    assetIndex.clear();
+    const catalog = [];
+    // 1) The shared library — what every user sees, regardless of which file
+    //    they're in. Previews are baked into the manifest, so no import needed
+    //    just to render the grid.
+    const libraryKeys = new Set();
+    for (const entry of SHARED_CATALOG) {
+        if (!entry.key)
+            continue;
+        libraryKeys.add(entry.key);
+        const id = `lib:${entry.key}`;
+        assetIndex.set(id, {
+            source: "library",
+            key: entry.key,
+            isSet: Boolean(entry.isSet),
+        });
+        catalog.push({
+            id,
+            name: entry.name || "Untitled",
+            width: Math.round(entry.width),
+            height: Math.round(entry.height),
+            preview: entry.preview,
+            source: "library",
+        });
+    }
+    // 2) Local components in the open file (brand-team WIP, or graceful fallback
+    //    when the manifest is empty). Skip any already published to the library
+    //    so the source file doesn't show every asset twice.
     if (typeof figma.loadAllPagesAsync === "function") {
         await figma.loadAllPagesAsync();
     }
@@ -44,19 +80,51 @@ async function sendCatalog() {
         types: ["COMPONENT", "COMPONENT_SET"],
     });
     const setIds = new Set(found.filter((n) => n.type === "COMPONENT_SET").map((n) => n.id));
-    const assets = found.filter((n) => !(n.type === "COMPONENT" && n.parent && setIds.has(n.parent.id)));
-    const catalog = [];
-    for (const node of assets) {
+    const localAssets = found.filter((n) => !(n.type === "COMPONENT" && n.parent && setIds.has(n.parent.id)));
+    for (const node of localAssets) {
+        if (node.key && libraryKeys.has(node.key))
+            continue; // already in the library
+        assetIndex.set(node.id, { source: "local", nodeId: node.id });
         catalog.push({
             id: node.id,
             name: node.name || "Untitled",
             width: Math.round(node.width),
             height: Math.round(node.height),
             preview: await thumbnail(node),
+            source: "local",
         });
     }
     catalog.sort((a, b) => a.name.localeCompare(b.name));
     figma.ui.postMessage({ type: "catalog", assets: catalog });
+}
+/**
+ * Resolve a UI selection id to a placeable component/-set node. Library assets
+ * are imported from the Team Library by key; local assets come from the open
+ * file. Throws a user-facing message when a library import fails.
+ */
+async function resolveComponent(assetId) {
+    const info = assetIndex.get(assetId);
+    if (!info)
+        throw new Error("That asset is no longer in the catalog. Try Refresh.");
+    if (info.source === "library") {
+        try {
+            return info.isSet
+                ? await figma.importComponentSetByKeyAsync(info.key)
+                : await figma.importComponentByKeyAsync(info.key);
+        }
+        catch (err) {
+            console.error("[resolveComponent] library import failed", info.key, err);
+            throw new Error("Couldn't load that asset from the Brand Assets library. Make sure the " +
+                "library is enabled for this file (Assets panel → Libraries).");
+        }
+    }
+    const node = await figma.getNodeByIdAsync(info.nodeId);
+    if (!node)
+        throw new Error("That asset no longer exists. Try Refresh.");
+    if (node.type !== "COMPONENT" && node.type !== "COMPONENT_SET") {
+        throw new Error("Selected asset is not a component.");
+    }
+    return node;
 }
 async function thumbnail(node) {
     try {
@@ -76,19 +144,10 @@ async function thumbnail(node) {
 // --- Place / Export --------------------------------------------------------
 /** Instance the chosen component, detach it to an editable frame, and resize it. */
 async function buildResizedFrame(req) {
-    const node = await figma.getNodeByIdAsync(req.assetId);
-    if (!node)
-        throw new Error("That asset no longer exists. Try Refresh.");
-    let instance;
-    if (node.type === "COMPONENT") {
-        instance = node.createInstance();
-    }
-    else if (node.type === "COMPONENT_SET") {
-        instance = node.defaultVariant.createInstance();
-    }
-    else {
-        throw new Error("Selected asset is not a component.");
-    }
+    const node = await resolveComponent(req.assetId);
+    const instance = node.type === "COMPONENT_SET"
+        ? node.defaultVariant.createInstance()
+        : node.createInstance();
     // Detach so the inner layers (background / artwork / text) become editable.
     const frame = instance.detachInstance();
     // Ensure the parent frame has a fill so resized output is never transparent.
@@ -293,4 +352,46 @@ async function importFiles(files) {
         figma.notify(`Imported ${created.length} illustration(s)`);
     }
     await sendCatalog();
+}
+// --- Brand-team catalog builder --------------------------------------------
+/**
+ * Scan the open file's PUBLISHED components and emit a catalog.json the brand
+ * team commits + republishes. Only components with a non-empty `key` are
+ * published to the Team Library; unpublished ones are reported so they can be
+ * published first.
+ */
+async function buildCatalogFromFile() {
+    if (typeof figma.loadAllPagesAsync === "function") {
+        await figma.loadAllPagesAsync();
+    }
+    const found = figma.root.findAllWithCriteria({
+        types: ["COMPONENT", "COMPONENT_SET"],
+    });
+    const setIds = new Set(found.filter((n) => n.type === "COMPONENT_SET").map((n) => n.id));
+    const assets = found.filter((n) => !(n.type === "COMPONENT" && n.parent && setIds.has(n.parent.id)));
+    const entries = [];
+    const unpublished = [];
+    for (const node of assets) {
+        if (!node.key) {
+            unpublished.push(node.name || "Untitled");
+            continue;
+        }
+        entries.push({
+            key: node.key,
+            name: node.name || "Untitled",
+            width: Math.round(node.width),
+            height: Math.round(node.height),
+            preview: await thumbnail(node),
+            isSet: node.type === "COMPONENT_SET",
+        });
+    }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    figma.ui.postMessage({
+        type: "catalog-json",
+        json: JSON.stringify(entries, null, 2),
+        count: entries.length,
+        unpublished,
+    });
+    figma.notify(`Built catalog: ${entries.length} published` +
+        (unpublished.length ? `, ${unpublished.length} unpublished (skipped)` : ""));
 }
