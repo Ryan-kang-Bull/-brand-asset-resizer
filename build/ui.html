@@ -97,6 +97,18 @@
         text-overflow: ellipsis;
       }
       .tile .dims { font-size: 10px; color: var(--figma-color-text-secondary, #888); }
+      .tile .badge {
+        display: inline-block;
+        margin-bottom: 4px;
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+      .tile .badge.library { background: #e3f0ff; color: #0b6bcb; }
+      .tile .badge.local { background: #fff0d6; color: #9a6700; }
 
       #empty {
         flex: 1;
@@ -188,15 +200,17 @@
     <header>
       <input id="search" type="search" placeholder="Search assets…" title="Filter the library by asset name" />
       <button id="import" title="Brand team: turn artwork into library components. With frames selected on the canvas, converts them to components; with nothing selected, lets you upload SVG/PNG/JPG files.">↑ Import</button>
+      <button id="catalog" title="Brand team: scan this file's published components and download an updated catalog.json to commit and republish. Run this in the Brand Assets source file.">⤓ Catalog</button>
       <button id="refresh" title="Re-scan the open file for components and rebuild the thumbnails">↻</button>
       <input id="file" type="file" multiple accept=".svg,.png,.jpg,.jpeg" hidden />
     </header>
 
     <div id="grid"></div>
     <div id="empty">
-      <strong>No components found</strong>
-      <span>Open a file containing the brand component library, then press ↻. Or use
-      Import to bring illustrations in.</span>
+      <strong>No assets yet</strong>
+      <span>Enable the <b>Brand Assets</b> library for this file (Assets panel →
+      Libraries) to see shared assets here. Brand team: open the source file and
+      use ↑ Import to add components, then ⤓ Catalog to publish them.</span>
     </div>
 
     <footer>
@@ -348,6 +362,15 @@
           none.textContent = "no preview";
           thumb.appendChild(none);
         }
+        if (a.source) {
+          var badge = document.createElement("span");
+          badge.className = "badge " + a.source;
+          badge.textContent = a.source === "library" ? "Library" : "Local";
+          badge.title = a.source === "library"
+            ? "Shared from the Brand Assets library — everyone sees this."
+            : "Lives only in this file (not yet published to the library).";
+          tile.appendChild(badge);
+        }
         var name = document.createElement("div");
         name.className = "name"; name.title = a.name; name.textContent = a.name;
         var dims = document.createElement("div");
@@ -411,6 +434,9 @@
       $("import").onclick = function () {
         $("status").textContent = "Importing selection…"; send({ type: "import-selection" });
       };
+      $("catalog").onclick = function () {
+        $("status").textContent = "Building catalog…"; send({ type: "build-catalog" });
+      };
       $("file").onchange = async function (e) {
         var files = Array.prototype.slice.call(e.target.files || []);
         if (!files.length) return;
@@ -442,6 +468,15 @@
         URL.revokeObjectURL(url);
       }
 
+      function downloadText(filename, text, mime) {
+        var blob = new Blob([text], { type: mime || "text/plain" });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+      }
+
       window.onmessage = function (event) {
         var msg = event.data.pluginMessage;
         if (!msg) return;
@@ -456,6 +491,13 @@
         } else if (msg.type === "exported") {
           download(msg.name, msg.format, msg.width, msg.bytes);
           $("status").textContent = "Exported “" + msg.name + "”.";
+        } else if (msg.type === "catalog-json") {
+          downloadText("catalog.json", msg.json, "application/json");
+          var note = "Downloaded catalog.json — " + msg.count + " published asset(s). Commit it and rebuild.";
+          if (msg.unpublished && msg.unpublished.length) {
+            note += " " + msg.unpublished.length + " unpublished (skipped): " + msg.unpublished.join(", ") + ".";
+          }
+          $("status").textContent = note;
         } else if (msg.type === "pick-files") {
           $("status").textContent = "Nothing selected — choose file(s).";
           $("file").click();
