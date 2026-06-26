@@ -97,18 +97,6 @@
         text-overflow: ellipsis;
       }
       .tile .dims { font-size: 10px; color: var(--figma-color-text-secondary, #888); }
-      .tile .badge {
-        display: inline-block;
-        margin-bottom: 4px;
-        padding: 1px 5px;
-        border-radius: 4px;
-        font-size: 9px;
-        font-weight: 600;
-        letter-spacing: 0.02em;
-        text-transform: uppercase;
-      }
-      .tile .badge.library { background: #e3f0ff; color: #0b6bcb; }
-      .tile .badge.local { background: #fff0d6; color: #9a6700; }
 
       #empty {
         flex: 1;
@@ -361,15 +349,6 @@
           none.className = "none";
           none.textContent = "no preview";
           thumb.appendChild(none);
-        }
-        if (a.source) {
-          var badge = document.createElement("span");
-          badge.className = "badge " + a.source;
-          badge.textContent = a.source === "library" ? "Library" : "Local";
-          badge.title = a.source === "library"
-            ? "Shared from the Brand Assets library — everyone sees this."
-            : "Lives only in this file (not yet published to the library).";
-          tile.appendChild(badge);
         }
         var name = document.createElement("div");
         name.className = "name"; name.title = a.name; name.textContent = a.name;

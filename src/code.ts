@@ -47,10 +47,11 @@ interface CatalogEntry {
 // edit the literal directly — edit catalog.json and rebuild.
 const SHARED_CATALOG: CatalogEntry[] = [] /* __INJECT_CATALOG__ */;
 
-/** How a catalog entry shown in the UI should be resolved when placed. */
-type ResolveInfo =
-  | { source: "library"; key: string; isSet: boolean }
-  | { source: "local"; nodeId: string };
+/** How a catalog entry is resolved when placed — always a Team Library import. */
+interface ResolveInfo {
+  key: string;
+  isSet: boolean;
+}
 
 // Rebuilt on every sendCatalog(); maps the UI's selection id → how to resolve it.
 const assetIndex = new Map<string, ResolveInfo>();
@@ -98,58 +99,22 @@ async function sendCatalog(): Promise<void> {
     width: number;
     height: number;
     preview: string | null;
-    source: "library" | "local";
   }> = [];
 
-  // 1) The shared library — what every user sees, regardless of which file
-  //    they're in. Previews are baked into the manifest, so no import needed
-  //    just to render the grid.
-  const libraryKeys = new Set<string>();
+  // The shared library is the only source — every user sees exactly the assets
+  // published to the Grab and Go library, regardless of which file they're in.
+  // Previews are baked into the manifest, so nothing is imported just to render
+  // the grid.
   for (const entry of SHARED_CATALOG) {
     if (!entry.key) continue;
-    libraryKeys.add(entry.key);
     const id = `lib:${entry.key}`;
-    assetIndex.set(id, {
-      source: "library",
-      key: entry.key,
-      isSet: Boolean(entry.isSet),
-    });
+    assetIndex.set(id, { key: entry.key, isSet: Boolean(entry.isSet) });
     catalog.push({
       id,
       name: entry.name || "Untitled",
       width: Math.round(entry.width),
       height: Math.round(entry.height),
       preview: entry.preview,
-      source: "library",
-    });
-  }
-
-  // 2) Local components in the open file (brand-team WIP, or graceful fallback
-  //    when the manifest is empty). Skip any already published to the library
-  //    so the source file doesn't show every asset twice.
-  if (typeof figma.loadAllPagesAsync === "function") {
-    await figma.loadAllPagesAsync();
-  }
-  const found = figma.root.findAllWithCriteria({
-    types: ["COMPONENT", "COMPONENT_SET"],
-  });
-  const setIds = new Set(
-    found.filter((n) => n.type === "COMPONENT_SET").map((n) => n.id)
-  );
-  const localAssets = found.filter(
-    (n) => !(n.type === "COMPONENT" && n.parent && setIds.has(n.parent.id))
-  );
-
-  for (const node of localAssets) {
-    if (node.key && libraryKeys.has(node.key)) continue; // already in the library
-    assetIndex.set(node.id, { source: "local", nodeId: node.id });
-    catalog.push({
-      id: node.id,
-      name: node.name || "Untitled",
-      width: Math.round(node.width),
-      height: Math.round(node.height),
-      preview: await thumbnail(node),
-      source: "local",
     });
   }
 
@@ -158,9 +123,9 @@ async function sendCatalog(): Promise<void> {
 }
 
 /**
- * Resolve a UI selection id to a placeable component/-set node. Library assets
- * are imported from the Team Library by key; local assets come from the open
- * file. Throws a user-facing message when a library import fails.
+ * Resolve a UI selection id to a placeable component/-set node by importing it
+ * from the Grab and Go Team Library by key. Throws a user-facing message when
+ * the import fails (e.g. the library isn't enabled for the current file).
  */
 async function resolveComponent(
   assetId: string
@@ -168,26 +133,17 @@ async function resolveComponent(
   const info = assetIndex.get(assetId);
   if (!info) throw new Error("That asset is no longer in the catalog. Try Refresh.");
 
-  if (info.source === "library") {
-    try {
-      return info.isSet
-        ? await figma.importComponentSetByKeyAsync(info.key)
-        : await figma.importComponentByKeyAsync(info.key);
-    } catch (err) {
-      console.error("[resolveComponent] library import failed", info.key, err);
-      throw new Error(
-        "Couldn't load that asset from the Brand Assets library. Make sure the " +
-          "library is enabled for this file (Assets panel → Libraries)."
-      );
-    }
+  try {
+    return info.isSet
+      ? await figma.importComponentSetByKeyAsync(info.key)
+      : await figma.importComponentByKeyAsync(info.key);
+  } catch (err) {
+    console.error("[resolveComponent] library import failed", info.key, err);
+    throw new Error(
+      "Couldn't load that asset from the Grab and Go library. Make sure the " +
+        "library is enabled for this file (Assets panel → Libraries)."
+    );
   }
-
-  const node = await figma.getNodeByIdAsync(info.nodeId);
-  if (!node) throw new Error("That asset no longer exists. Try Refresh.");
-  if (node.type !== "COMPONENT" && node.type !== "COMPONENT_SET") {
-    throw new Error("Selected asset is not a component.");
-  }
-  return node;
 }
 
 async function thumbnail(node: SceneNode): Promise<string | null> {
@@ -297,11 +253,36 @@ function classifyFrame(frame: FrameNode): {
   return { background, assets };
 }
 
+/** Force any image paints to cover their layer (scaleMode FILL) so changing the
+ *  frame's aspect ratio never stretches the image — it crops to fill instead. */
+function coverImagePaints(node: SceneNode): void {
+  if (!("fills" in node)) return;
+  const fills = (node as GeometryMixin).fills;
+  if (fills === figma.mixed || !Array.isArray(fills)) return;
+  let changed = false;
+  const next = (fills as readonly Paint[]).map((p) => {
+    if (p.type === "IMAGE" && p.scaleMode !== "FILL") {
+      changed = true;
+      return { ...p, scaleMode: "FILL" } as ImagePaint;
+    }
+    return p;
+  });
+  if (changed) (node as GeometryMixin).fills = next;
+}
+
 /**
- * Resize `frame` to W×H, applying per-layer behavior:
- *   - background fills 100% of the frame (gradients stay normalized/proportional)
- *   - artwork repositions to `anchorH` when W >= threshold, else scales-to-fit centered
- *   - text untouched
+ * Resize `frame` to W×H so it always fills the background without stretching.
+ * Two component shapes are handled:
+ *
+ *   1. Artwork-on-a-background (a bottommost RECTANGLE exists): the background
+ *      fills the frame (image fills set to cover, never stretch); the foreground
+ *      artwork repositions to `anchorH` when W ≥ threshold, else scales-to-fit.
+ *   2. Full-bleed illustration (no background rectangle — the art *is* the
+ *      background): the whole composition scales to COVER the frame, aspect
+ *      ratio locked (no stretch), anchored about the original centre, with the
+ *      frame clipping any overflow.
+ *
+ * Text layers are always left untouched.
  */
 function applyContextResize(
   frame: FrameNode,
@@ -312,6 +293,8 @@ function applyContextResize(
   margin: number
 ): void {
   const m = Math.max(0, margin);
+  const W0 = frame.width; // native size, captured before resizing
+  const H0 = frame.height;
   const { background, assets } = classifyFrame(frame);
 
   // Asset combined bounding box (frame-local), before resize.
@@ -328,46 +311,70 @@ function applyContextResize(
   const bw = maxX - minX;
   const bh = maxY - minY;
 
+  // A frame-level image fill (full-bleed background) must cover, not stretch.
+  coverImagePaints(frame);
+
   // Resize the frame without disturbing children; we place layers explicitly.
   frame.resizeWithoutConstraints(W, H);
+  frame.clipsContent = true; // clip whatever overflows after filling
 
   if (background) {
+    // (1) Background rectangle fills the frame edge-to-edge; image fills cover.
     background.x = 0;
     background.y = 0;
+    coverImagePaints(background);
     background.resize(W, H);
+
+    if (assets.length === 0 || bw <= 0 || bh <= 0) return;
+
+    if (W >= threshold) {
+      // Reposition mode: keep artwork size, move to the chosen anchor.
+      let targetX: number;
+      if (anchorH === "left") targetX = m;
+      else if (anchorH === "right") targetX = W - bw - m;
+      else targetX = (W - bw) / 2;
+      const targetY = (H - bh) / 2;
+      const dx = targetX - minX;
+      const dy = targetY - minY;
+      for (const a of assets) {
+        a.x += dx;
+        a.y += dy;
+      }
+    } else {
+      // Scale mode: ratio-locked fit to the limiting dimension, then center.
+      const factor = Math.min((W - 2 * m) / bw, (H - 2 * m) / bh);
+      const originX = (W - bw * factor) / 2;
+      const originY = (H - bh * factor) / 2;
+      for (const a of assets) {
+        const relX = (a.x - minX) * factor;
+        const relY = (a.y - minY) * factor;
+        if ("rescale" in a && factor > 0) {
+          a.rescale(factor);
+        } else if ("resize" in a) {
+          a.resize(Math.max(1, a.width * factor), Math.max(1, a.height * factor));
+        }
+        a.x = originX + relX;
+        a.y = originY + relY;
+      }
+    }
+    return;
   }
 
-  if (assets.length === 0 || bw <= 0 || bh <= 0) return;
-
-  if (W >= threshold) {
-    // Reposition mode: keep artwork size, move to the chosen anchor.
-    let targetX: number;
-    if (anchorH === "left") targetX = m;
-    else if (anchorH === "right") targetX = W - bw - m;
-    else targetX = (W - bw) / 2;
-    const targetY = (H - bh) / 2;
-    const dx = targetX - minX;
-    const dy = targetY - minY;
-    for (const a of assets) {
-      a.x += dx;
-      a.y += dy;
+  // (2) Full-bleed illustration: scale the whole composition to COVER the frame,
+  // aspect ratio locked, anchored about the original centre so the framing holds.
+  if (assets.length === 0 || W0 <= 0 || H0 <= 0) return;
+  const cover = Math.max(W / W0, H / H0);
+  for (const a of assets) {
+    const ox = a.x;
+    const oy = a.y;
+    if ("rescale" in a && cover > 0) {
+      a.rescale(cover);
+    } else if ("resize" in a) {
+      a.resize(Math.max(1, a.width * cover), Math.max(1, a.height * cover));
     }
-  } else {
-    // Scale mode: ratio-locked fit to the limiting dimension, then center.
-    const factor = Math.min((W - 2 * m) / bw, (H - 2 * m) / bh);
-    const originX = (W - bw * factor) / 2;
-    const originY = (H - bh * factor) / 2;
-    for (const a of assets) {
-      const relX = (a.x - minX) * factor;
-      const relY = (a.y - minY) * factor;
-      if ("rescale" in a && factor > 0) {
-        a.rescale(factor);
-      } else if ("resize" in a) {
-        a.resize(Math.max(1, a.width * factor), Math.max(1, a.height * factor));
-      }
-      a.x = originX + relX;
-      a.y = originY + relY;
-    }
+    // Map the original top-left about the frame centre by the cover factor.
+    a.x = (ox - W0 / 2) * cover + W / 2;
+    a.y = (oy - H0 / 2) * cover + H / 2;
   }
 }
 
