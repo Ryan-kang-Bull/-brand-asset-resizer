@@ -97,18 +97,6 @@
         text-overflow: ellipsis;
       }
       .tile .dims { font-size: 10px; color: var(--figma-color-text-secondary, #888); }
-      .tile .badge {
-        display: inline-block;
-        margin-bottom: 4px;
-        padding: 1px 5px;
-        border-radius: 4px;
-        font-size: 9px;
-        font-weight: 600;
-        letter-spacing: 0.02em;
-        text-transform: uppercase;
-      }
-      .tile .badge.library { background: #e3f0ff; color: #0b6bcb; }
-      .tile .badge.local { background: #fff0d6; color: #9a6700; }
 
       #empty {
         flex: 1;
@@ -143,7 +131,7 @@
       .row { display: flex; gap: 6px; align-items: center; }
       .row label { color: var(--figma-color-text-secondary, #888); }
       #preset { flex: 1; }
-      #w, #h, #thr, #mg { width: 56px; }
+      #w, #h { width: 56px; }
       .grow { flex: 1; }
       .field { display: flex; flex-direction: column; gap: 3px; }
       .field > span { color: var(--figma-color-text-secondary, #888); font-size: 10px; }
@@ -231,21 +219,13 @@
             <span>Height <i class="help" data-help="Target frame height in pixels. Leave blank to keep the artwork's native height and only change the width.">?</i></span>
             <input id="h" type="number" min="1" placeholder="keep" />
           </div>
-          <div class="field">
-            <span>Threshold <i class="help" data-help="Mode switch by width. At or ABOVE this width → Reposition mode: the artwork keeps its exact size and moves to the anchor. BELOW it → Scale mode: the artwork scales to fit the frame, ratio locked. Default 768.">?</i></span>
-            <input id="thr" type="number" min="1" value="768" />
-          </div>
           <div class="field grow">
-            <span>Anchor <i class="help" data-help="Reposition mode only: where the artwork sits horizontally in the frame — Left edge, Center, or Right edge (offset by the margin).">?</i></span>
+            <span>Anchor <i class="help" data-help="When the size changes the graphic's aspect ratio, it fills the frame and the overflow is cropped. Anchor picks which side is kept — Left, Center, or Right.">?</i></span>
             <div class="seg" id="anchor">
               <button data-anchor="left">L</button>
               <button data-anchor="center" class="on">C</button>
               <button data-anchor="right">R</button>
             </div>
-          </div>
-          <div class="field">
-            <span>Margin <i class="help" data-help="Gap in pixels from the frame edge. Used by the anchor in Reposition mode, and as padding when fitting in Scale mode.">?</i></span>
-            <input id="mg" type="number" min="0" value="0" />
           </div>
         </div>
         <div class="row">
@@ -362,15 +342,6 @@
           none.textContent = "no preview";
           thumb.appendChild(none);
         }
-        if (a.source) {
-          var badge = document.createElement("span");
-          badge.className = "badge " + a.source;
-          badge.textContent = a.source === "library" ? "Library" : "Local";
-          badge.title = a.source === "library"
-            ? "Shared from the Brand Assets library — everyone sees this."
-            : "Lives only in this file (not yet published to the library).";
-          tile.appendChild(badge);
-        }
         var name = document.createElement("div");
         name.className = "name"; name.title = a.name; name.textContent = a.name;
         var dims = document.createElement("div");
@@ -404,9 +375,7 @@
           assetId: selectedId,
           width: w,
           height: h ? h : null,
-          threshold: parseInt($("thr").value, 10) || 768,
           anchorH: anchor,
-          margin: parseInt($("mg").value, 10) || 0,
         };
       }
 
