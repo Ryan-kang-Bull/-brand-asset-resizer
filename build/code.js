@@ -197,46 +197,70 @@ function coverImagePaints(node) {
     if (changed)
         node.fills = next;
 }
+/** Whether a node paints a visible fill of its own (so it can back the artwork). */
+function hasOwnFill(node) {
+    if (!("fills" in node))
+        return false;
+    const fills = node.fills;
+    if (fills === figma.mixed)
+        return true;
+    return Array.isArray(fills) && fills.some((p) => p.visible !== false);
+}
 /**
- * Resize `frame` to W×H by scaling the WHOLE component to cover the target,
- * aspect-ratio locked (never stretched). `frame.rescale` scales every layer —
- * geometry, strokes, blurs, image fills — uniformly, so:
- *   - at the native size this is an exact identity → a placed asset matches its
- *     thumbnail;
- *   - at any other size the graphic scales as one piece and the overflow is
- *     cropped, biased to `anchorH` horizontally and centred vertically.
+ * Resize `frame` to W×H. Only the BACKGROUND fills the frame; the foreground
+ * artwork keeps its native size and is just repositioned:
+ *   - the background (bottommost RECTANGLE, or the frame's own fill if there
+ *     isn't one, or — failing both — the lowest layer stretched) fills the
+ *     frame edge-to-edge; image fills are set to cover so they fill without
+ *     distortion;
+ *   - the foreground artwork is NOT scaled — it stays its real size and shifts
+ *     to stay anchored as the frame grows (`anchorH` horizontally, centred
+ *     vertically), so at the native size everything is an exact identity and a
+ *     placed asset matches its thumbnail.
+ *
+ * Text layers are left untouched; overflow is clipped by the frame.
  */
 function applyContextResize(frame, W, H, anchorH) {
-    const W0 = frame.width; // native size, before any scaling
+    const W0 = frame.width; // native size, before resizing
     const H0 = frame.height;
     if (W0 <= 0 || H0 <= 0) {
         frame.resizeWithoutConstraints(W, H);
         return;
     }
-    // Image fills should cover their layer so they never stretch on aspect change.
+    const { background, assets } = classifyFrame(frame);
+    // The frame's own fill backs the artwork when there's no background rectangle.
     coverImagePaints(frame);
-    for (const child of frame.children)
-        coverImagePaints(child);
-    // Scale the entire component uniformly so it covers the target box.
-    const cover = Math.max(W / W0, H / H0);
-    if (cover !== 1)
-        frame.rescale(cover);
-    // Crop the (now ≥ target) frame down to W×H, biasing the crop by the anchor.
-    const overflowX = frame.width - W;
-    const overflowY = frame.height - H;
-    let dx;
-    if (anchorH === "left")
-        dx = 0;
-    else if (anchorH === "right")
-        dx = overflowX;
-    else
-        dx = overflowX / 2;
-    const dy = overflowY / 2;
     frame.resizeWithoutConstraints(W, H);
+    frame.clipsContent = true; // clip whatever overflows the new bounds
+    // Choose what fills the background: the bottommost rectangle, or — when there
+    // is neither a rectangle nor a frame fill — fall back to stretching the
+    // lowest layer so the background is never left transparent.
+    let bg = background;
+    let foreground = assets;
+    if (!bg && !hasOwnFill(frame) && foreground.length > 0) {
+        bg = foreground[0]; // lowest non-text layer
+        foreground = foreground.slice(1);
+    }
+    // Background fills the frame edge-to-edge; image fills cover (never stretch),
+    // a fallback layer is stretched to fill.
+    if (bg) {
+        bg.x = 0;
+        bg.y = 0;
+        coverImagePaints(bg);
+        if ("resize" in bg)
+            bg.resize(W, H);
+    }
+    // Foreground keeps its real size; shift it so it stays anchored as the frame
+    // grows. At the native size dW/dH are 0 → no movement → matches the source.
+    if (foreground.length === 0)
+        return;
+    const fracX = anchorH === "left" ? 0 : anchorH === "right" ? 1 : 0.5;
+    const dx = (W - W0) * fracX;
+    const dy = (H - H0) * 0.5;
     if (dx !== 0 || dy !== 0) {
-        for (const child of frame.children) {
-            child.x -= dx;
-            child.y -= dy;
+        for (const a of foreground) {
+            a.x += dx;
+            a.y += dy;
         }
     }
     frame.clipsContent = true;
