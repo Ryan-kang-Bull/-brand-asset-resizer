@@ -11,7 +11,7 @@
         overflow-x: hidden;
         font: 11px/1.4 Inter, -apple-system, system-ui, sans-serif;
         color: var(--figma-color-text, #1a1a1a);
-        background: #ffe44d;
+        background: #f0f0f0;
       }
       button {
         font: inherit;
@@ -145,6 +145,12 @@
         border-color: transparent;
       }
       #status { font-size: 10px; color: var(--figma-color-text-secondary, #888); min-height: 13px; }
+      .note {
+        font-size: 10px;
+        line-height: 1.4;
+        color: var(--figma-color-text-secondary, #888);
+        font-style: italic;
+      }
 
       /* "?" help icons + popover */
       .help {
@@ -220,7 +226,7 @@
             <input id="h" type="number" min="1" placeholder="keep" />
           </div>
           <div class="field grow">
-            <span>Anchor <i class="help" data-help="The background fills the frame; the artwork keeps its real size. Anchor sets where the artwork sits horizontally — Left, Center, or Right. (It stays vertically centered.)">?</i></span>
+            <span>Anchor <i class="help" data-help="The background fills the frame; the artwork is sized to a fixed share of the shorter side (it only scales up, never down). Anchor sets where it sits horizontally — Left, Center, or Right. (It stays vertically centered.)">?</i></span>
             <div class="seg" id="anchor">
               <button data-anchor="left">L</button>
               <button data-anchor="center" class="on">C</button>
@@ -238,6 +244,8 @@
           </select>
           <button id="export">Export</button>
         </div>
+        <div class="note">Sizing is automatic and won't always be pixel-perfect —
+          you may need to manually scale or nudge the artwork after placing.</div>
       </div>
 
       <div id="status"></div>
