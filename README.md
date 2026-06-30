@@ -174,14 +174,49 @@ npm run watch      # rebuild on change
 npm run typecheck  # type-check without emitting
 ```
 
-## Load in Figma (development)
+## Add the plugin in Figma (import from manifest)
 
-1. Figma desktop → **Plugins → Development → Import plugin from manifest…**
-2. Select `manifest.json` in this folder.
-3. Run **Plugins → Development → Brand Asset Resizer** from any file.
+Use this to run the plugin yourself from a local clone — for development, or to
+try it before it's published to the org. Importing a manifest requires the
+**Figma desktop app** (the browser can't read local files).
 
-> If you move this folder, Figma keeps pointing at the old path — remove and
-> re-import the manifest from the new location.
+**Prerequisites**
+
+1. Install the [Figma desktop app](https://www.figma.com/downloads/).
+2. Install [Node.js](https://nodejs.org/) (v18+).
+3. Clone this repo and build it once, so `build/code.js` and `build/ui.html`
+   exist (the manifest points at `build/`):
+
+   ```bash
+   git clone git@github.com:Ryan-kang-Bull/-brand-asset-resizer.git
+   cd -brand-asset-resizer
+   npm install
+   npm run build
+   ```
+
+**Import the manifest**
+
+1. Open the **Figma desktop app**.
+2. From the menu bar: **Plugins → Development → Import plugin from manifest…**
+   (you can also right-click the canvas → **Plugins → Development → Import plugin
+   from manifest…**).
+3. Select the **`manifest.json`** at the root of this folder.
+4. Figma adds **Brand Asset Resizer** under **Plugins → Development**.
+
+**Run it**
+
+- Open any file and choose **Plugins → Development → Brand Asset Resizer**. The
+  shared library assets appear in the grid — pick one, set a size, and **Place on
+  canvas** or **Export**.
+
+**Notes**
+
+- After editing source, run `npm run build` (or `npm run watch`) and **re-run**
+  the plugin to pick up the new `build/`. No need to re-import the manifest.
+- To get the latest assets/code, `git pull` then `npm run build`.
+- If you **move or rename** this folder, Figma keeps pointing at the old path —
+  remove the plugin from **Plugins → Development** and re-import the manifest
+  from the new location.
 
 ## Distribute to the team
 
