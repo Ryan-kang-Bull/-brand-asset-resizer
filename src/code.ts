@@ -13,7 +13,7 @@ const THUMB_MAX_PX = 240;
 // When an asset is placed larger than native, the artwork is sized to this
 // fraction of the frame's shorter side (the background fills the rest). It's
 // floored at the artwork's native size, so it only ever scales up. Tunable.
-const ARTWORK_FRACTION = 0.6;
+const ARTWORK_FRACTION = 0.8;
 
 type ExportFormat = "PNG" | "SVG" | "JPG";
 
