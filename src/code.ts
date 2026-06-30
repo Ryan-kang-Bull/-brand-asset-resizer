@@ -10,6 +10,11 @@
 
 const THUMB_MAX_PX = 240;
 
+// When an asset is placed larger than native, the artwork is sized to this
+// fraction of the frame's shorter side (the background fills the rest). It's
+// floored at the artwork's native size, so it only ever scales up. Tunable.
+const ARTWORK_FRACTION = 0.6;
+
 type ExportFormat = "PNG" | "SVG" | "JPG";
 
 /** A place/export request: which asset, target size, and crop anchor. */
@@ -277,16 +282,17 @@ function hasOwnFill(node: SceneNode): boolean {
 }
 
 /**
- * Resize `frame` to W×H. Only the BACKGROUND fills the frame; the foreground
- * artwork keeps its native size and is just repositioned:
+ * Resize `frame` to W×H. The BACKGROUND fills the frame; the foreground artwork
+ * scales WITH the frame so it keeps the same relative footprint (never tiny in a
+ * big frame, never cropped):
  *   - the background (bottommost RECTANGLE, or the frame's own fill if there
- *     isn't one, or — failing both — the lowest layer stretched) fills the
- *     frame edge-to-edge; image fills are set to cover so they fill without
- *     distortion;
- *   - the foreground artwork is NOT scaled — it stays its real size and shifts
- *     to stay anchored as the frame grows (`anchorH` horizontally, centred
- *     vertically), so at the native size everything is an exact identity and a
- *     placed asset matches its thumbnail.
+ *     isn't one, or — failing both — the lowest layer stretched) fills the frame
+ *     edge-to-edge; image fills are set to cover so they fill without distortion;
+ *   - the foreground artwork is sized to a fixed fraction (`ARTWORK_FRACTION`)
+ *     of the frame's shorter side, floored at its native size so it only scales
+ *     up — aspect-ratio locked, never cropped. The anchor positions it
+ *     horizontally (L/C/R); vertically it stays centred. At the native size a
+ *     full-bleed asset is unchanged, so it still matches its thumbnail.
  *
  * Text layers are left untouched; overflow is clipped by the frame.
  */
@@ -330,19 +336,43 @@ function applyContextResize(
     if ("resize" in bg) bg.resize(W, H);
   }
 
-  // Foreground keeps its real size; shift it so it stays anchored as the frame
-  // grows. At the native size dW/dH are 0 → no movement → matches the source.
+  // Foreground is sized to a fixed fraction of the frame's shorter side, floored
+  // at its native size so it never shrinks (placing at native size still matches
+  // the thumbnail). Aspect locked, never cropped; the anchor positions it
+  // horizontally, vertically centred.
   if (foreground.length === 0) return;
-  const fracX = anchorH === "left" ? 0 : anchorH === "right" ? 1 : 0.5;
-  const dx = (W - W0) * fracX;
-  const dy = (H - H0) * 0.5;
-  if (dx !== 0 || dy !== 0) {
-    for (const a of foreground) {
-      a.x += dx;
-      a.y += dy;
-    }
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const a of foreground) {
+    minX = Math.min(minX, a.x);
+    minY = Math.min(minY, a.y);
+    maxX = Math.max(maxX, a.x + a.width);
+    maxY = Math.max(maxY, a.y + a.height);
   }
-  frame.clipsContent = true;
+  const bw = maxX - minX;
+  const bh = maxY - minY;
+  if (bw <= 0 || bh <= 0) return;
+
+  const target = ARTWORK_FRACTION * Math.min(W, H);
+  const scale = Math.max(1, target / Math.max(bw, bh));
+
+  const fracX = anchorH === "left" ? 0 : anchorH === "right" ? 1 : 0.5;
+  const originX = (W - bw * scale) * fracX; // bbox left, biased by the anchor
+  const originY = (H - bh * scale) / 2; // vertically centred
+  for (const a of foreground) {
+    const relX = (a.x - minX) * scale;
+    const relY = (a.y - minY) * scale;
+    if ("rescale" in a && scale > 0) {
+      a.rescale(scale);
+    } else if ("resize" in a) {
+      a.resize(Math.max(1, a.width * scale), Math.max(1, a.height * scale));
+    }
+    a.x = originX + relX;
+    a.y = originY + relY;
+  }
 }
 
 // --- Import ----------------------------------------------------------------
